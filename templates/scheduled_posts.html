@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Scheduled Posts{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h2 style="font-weight:800;letter-spacing:-.5px;margin-bottom:.2rem;">
+      <i class="fa-solid fa-calendar-days me-2" style="color:var(--accent);"></i>Scheduled Posts
+    </h2>
+    <p style="color:var(--text-muted);font-size:.875rem;margin:0;">All your queued and published posts.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('generate_image') }}" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-plus me-1"></i> New Post
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if posts %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Image</th>
+              <th>Caption</th>
+              <th>Scheduled</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for post in posts %}
+            <tr>
+              <td style="color:var(--text-muted);font-size:.8rem;">{{ post['id'] }}</td>
+              <td>
+                {% if post['image_path'] %}
+                  <img src="{{ url_for('static', filename='images/' + post['image_path'].split('/')[-1]) }}"
+                       style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--border);"
+                       onerror="this.style.display='none'">
+                {% else %}
+                  <div style="width:44px;height:44px;background:var(--bg-secondary);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-image" style="color:var(--text-muted);font-size:.8rem;"></i>
+                  </div>
+                {% endif %}
+              </td>
+              <td style="max-width:200px;">
+                <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem;">
+                  {{ post['caption'][:80] if post['caption'] else '—' }}{% if post['caption'] and post['caption']|length > 80 %}…{% endif %}
+                </span>
+              </td>
+              <td style="white-space:nowrap;font-size:.8rem;color:var(--text-secondary);">{{ post['schedule_time'] }}</td>
+              <td>
+                {% if post['status'] == 'posted' %}
+                  <span class="badge bg-success">
+                    <i class="fa-solid fa-check me-1"></i>Posted
+                  </span>
+                {% elif post['status'] == 'pending' %}
+                  <span class="badge bg-warning">
+                    <i class="fa-solid fa-clock me-1"></i>Pending
+                  </span>
+                {% else %}
+                  <span class="badge bg-danger">{{ post['status'] }}</span>
+                {% endif %}
+              </td>
+              <td style="font-size:.78rem;color:var(--text-muted);white-space:nowrap;">{{ post['created_at'] }}</td>
+              <td>
+                {% if post['status'] == 'pending' %}
+                  <a href="{{ url_for('cancel_post', post_id=post['id']) }}"
+                     class="btn btn-danger btn-sm"
+                     onclick="return confirm('Cancel this post?')">
+                    <i class="fa-solid fa-xmark"></i>
+                  </a>
+                {% else %}
+                  <span style="color:var(--text-muted);font-size:.8rem;">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon"><i class="fa-solid fa-calendar-xmark"></i></div>
+        <p>No scheduled posts found.</p>
+        <a href="{{ url_for('generate_image') }}" class="btn btn-primary mt-3">
+          <i class="fa-solid fa-plus me-1"></i> Create First Post
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

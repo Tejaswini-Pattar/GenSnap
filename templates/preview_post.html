@@ -1,0 +1,704 @@
+{% extends "base.html" %}
+{% block title %}Preview Post{% endblock %}
+
+{% block head %}
+<style>
+/* Editor layout (same as generate_image.html) */
+.editor-wrap { display:flex; gap:1.5rem; align-items:flex-start; }
+@media(max-width:768px){ .editor-wrap { flex-direction:column; } }
+.editor-canvas-col { flex:0 0 auto; width:300px; max-width:100%; }
+@media(max-width:768px){ .editor-canvas-col { width:100%; } }
+.editor-controls-col { flex:1; min-width:0; }
+.canvas-wrap {
+  position:relative; background:#f0eeff; border:1px solid var(--border);
+  border-radius:var(--radius); overflow:hidden; width:100%; aspect-ratio:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.canvas-wrap canvas { width:100% !important; height:100% !important; display:block; }
+
+/* Filter strip */
+.filter-strip { display:flex; gap:.6rem; overflow-x:auto; padding-bottom:.5rem; scrollbar-width:thin; }
+.filter-strip::-webkit-scrollbar { height:4px; }
+.filter-strip::-webkit-scrollbar-thumb { background:var(--border-hover); border-radius:2px; }
+.filter-btn { flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:.35rem; cursor:pointer; border:none; background:none; padding:0; }
+.filter-thumb { width:58px; height:58px; border-radius:10px; border:2px solid transparent; overflow:hidden; transition:var(--transition); background:var(--bg-secondary); }
+.filter-btn canvas { width:58px !important; height:58px !important; display:block; }
+.filter-btn.active .filter-thumb, .filter-btn:hover .filter-thumb { border-color:var(--accent); }
+.filter-label { font-size:.68rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.filter-btn.active .filter-label { color:var(--accent); }
+
+/* Sliders */
+.adj-row { display:flex; align-items:center; gap:.75rem; margin-bottom:.85rem; }
+.adj-icon { width:24px; text-align:center; color:var(--text-muted); font-size:.82rem; flex-shrink:0; }
+.adj-label { width:76px; font-size:.78rem; font-weight:600; color:var(--text-secondary); flex-shrink:0; }
+.adj-slider { flex:1; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; background:var(--border); outline:none; cursor:pointer; }
+.adj-slider::-webkit-slider-thumb { -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 1px 4px rgba(124,92,252,.4); }
+.adj-slider::-moz-range-thumb { width:15px; height:15px; border-radius:50%; background:var(--accent); cursor:pointer; border:none; }
+.adj-value { width:30px; text-align:right; font-size:.75rem; font-weight:600; color:var(--text-muted); flex-shrink:0; }
+
+/* Editor tabs */
+.editor-tabs { display:flex; gap:.25rem; margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:.5rem; }
+.editor-tab { font-size:.78rem; font-weight:600; color:var(--text-muted); padding:.35rem .75rem; border-radius:var(--radius-sm); cursor:pointer; border:none; background:none; transition:var(--transition); }
+.editor-tab.active { color:var(--accent); background:rgba(124,92,252,.08); }
+.editor-tab:hover:not(.active) { color:var(--text-secondary); background:rgba(124,92,252,.04); }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9 col-md-10">
+
+    <!-- Page header -->
+    <div class="mb-4">
+      <h2 style="font-weight:800;letter-spacing:-.5px;margin-bottom:.25rem;">
+        <i class="fa-solid fa-eye me-2" style="color:var(--accent);"></i>Preview Post
+      </h2>
+      <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">Edit and review your post before publishing.</p>
+    </div>
+
+    <!-- Image editor card -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <i class="fa-solid fa-sliders me-2" style="color:var(--accent);"></i>Image Editor
+      </div>
+      <div class="card-body p-4">
+        {% if image_path %}
+        <div class="editor-wrap">
+
+          <!-- Canvas -->
+          <div class="editor-canvas-col">
+            <div class="canvas-wrap">
+              <canvas id="previewCanvas"></canvas>
+            </div>
+            <div class="mt-2">
+              <button type="button" class="btn btn-secondary btn-sm w-100" onclick="resetAll()">
+                <i class="fa-solid fa-rotate-left me-1"></i> Reset
+              </button>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="editor-controls-col">
+            <div class="editor-tabs">
+              <button class="editor-tab active" onclick="switchEditorTab('filters', this)">
+                <i class="fa-solid fa-palette me-1"></i>Filters
+              </button>
+              <button class="editor-tab" onclick="switchEditorTab('adjust', this)">
+                <i class="fa-solid fa-sliders me-1"></i>Adjust
+              </button>
+            </div>
+
+            <!-- Filters tab -->
+            <div id="tab-filters" class="tab-panel active">
+              <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;">Tap a filter to apply it.</p>
+              <div class="filter-strip" id="filterStrip"></div>
+            </div>
+
+            <!-- Adjust tab -->
+            <div id="tab-adjust" class="tab-panel">
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-sun"></i></div>
+                <div class="adj-label">Brightness</div>
+                <input type="range" class="adj-slider" id="sl-brightness" min="-100" max="100" value="0" oninput="updateAdj(this,'brightness')">
+                <div class="adj-value" id="val-brightness">0</div>
+              </div>
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-circle-half-stroke"></i></div>
+                <div class="adj-label">Contrast</div>
+                <input type="range" class="adj-slider" id="sl-contrast" min="-100" max="100" value="0" oninput="updateAdj(this,'contrast')">
+                <div class="adj-value" id="val-contrast">0</div>
+              </div>
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-droplet"></i></div>
+                <div class="adj-label">Saturation</div>
+                <input type="range" class="adj-slider" id="sl-saturation" min="-100" max="100" value="0" oninput="updateAdj(this,'saturation')">
+                <div class="adj-value" id="val-saturation">0</div>
+              </div>
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-temperature-half"></i></div>
+                <div class="adj-label">Warmth</div>
+                <input type="range" class="adj-slider" id="sl-warmth" min="-100" max="100" value="0" oninput="updateAdj(this,'warmth')">
+                <div class="adj-value" id="val-warmth">0</div>
+              </div>
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-eye"></i></div>
+                <div class="adj-label">Vignette</div>
+                <input type="range" class="adj-slider" id="sl-vignette" min="0" max="100" value="0" oninput="updateAdj(this,'vignette')">
+                <div class="adj-value" id="val-vignette">0</div>
+              </div>
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="adj-label">Sharpen</div>
+                <input type="range" class="adj-slider" id="sl-sharpen" min="0" max="100" value="0" oninput="updateAdj(this,'sharpen')">
+                <div class="adj-value" id="val-sharpen">0</div>
+              </div>
+              <div class="adj-row">
+                <div class="adj-icon"><i class="fa-solid fa-cloud"></i></div>
+                <div class="adj-label">Fade</div>
+                <input type="range" class="adj-slider" id="sl-fade" min="0" max="100" value="0" oninput="updateAdj(this,'fade')">
+                <div class="adj-value" id="val-fade">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-state-icon"><i class="fa-solid fa-image"></i></div>
+          <p>No image to preview</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Caption -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <i class="fa-solid fa-align-left me-2" style="color:var(--accent);"></i>Caption
+      </div>
+      <div class="card-body p-4">
+        <!-- Editable caption textarea -->
+        <textarea id="previewCaptionEdit" name="caption_edit" rows="4"
+          style="width:100%;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;font-size:.875rem;color:var(--text-primary);line-height:1.7;resize:vertical;outline:none;font-family:inherit;"
+          placeholder="Edit your caption here…">{{ caption|default('', true) }}</textarea>
+
+        <!-- AI Caption Generator button -->
+        <div style="margin-top:.75rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+          <button type="button" onclick="openPreviewCaptionModal()"
+            style="display:inline-flex;align-items:center;gap:.5rem;padding:.45rem .9rem;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:rgba(124,92,252,.07);color:var(--accent);font-size:.8rem;font-weight:700;cursor:pointer;transition:var(--transition);"
+            onmouseover="this.style.background='rgba(124,92,252,.15)'"
+            onmouseout="this.style.background='rgba(124,92,252,.07)'">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            Regenerate with AI
+          </button>
+          <span style="font-size:.75rem;color:var(--text-muted);">Gemini Vision analyses your image and suggests captions</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Platforms -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <i class="fa-solid fa-share-nodes me-2" style="color:var(--accent);"></i>Posting to
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3">
+          <div class="col-6">
+            <div class="platform-card {% if 'instagram' in platforms %}connected{% endif %}">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fa-brands fa-instagram" style="font-size:1.2rem;color:#e1306c;"></i>
+                <span style="font-weight:600;font-size:.875rem;">Instagram</span>
+                {% if 'instagram' in platforms %}
+                  <span class="badge bg-success ms-auto">Selected</span>
+                {% else %}
+                  <span class="badge ms-auto" style="background:rgba(255,255,255,.06);color:var(--text-muted);">Skipped</span>
+                {% endif %}
+              </div>
+              {% if 'instagram' in platforms and not ig_connected %}
+                <div style="margin-top:.5rem;font-size:.78rem;color:var(--warning);">
+                  <i class="fa-solid fa-triangle-exclamation me-1"></i>Not connected —
+                  <a href="{{ url_for('update_instagram_session') }}">connect now</a>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="platform-card {% if 'telegram' in platforms %}connected{% endif %}">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fa-brands fa-telegram" style="font-size:1.2rem;color:#229ed9;"></i>
+                <span style="font-weight:600;font-size:.875rem;">Telegram</span>
+                {% if 'telegram' in platforms %}
+                  <span class="badge bg-success ms-auto">Selected</span>
+                {% else %}
+                  <span class="badge ms-auto" style="background:rgba(255,255,255,.06);color:var(--text-muted);">Skipped</span>
+                {% endif %}
+              </div>
+              {% if 'telegram' in platforms and not telegram_connected %}
+                <div style="margin-top:.5rem;font-size:.78rem;color:var(--warning);">
+                  <i class="fa-solid fa-triangle-exclamation me-1"></i>Not connected —
+                  <a href="{{ url_for('connect_telegram') }}">connect now</a>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        {% if (('instagram' in platforms and not ig_connected) or ('telegram' in platforms and not telegram_connected)) %}
+        <div class="alert alert-warning mt-3 mb-0">
+          <i class="fa-solid fa-triangle-exclamation me-2"></i>
+          Some platforms are not connected. Posts to those platforms will be skipped.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- What happens next -->
+    <div class="card mb-4" style="background:rgba(2,132,199,.04);border-color:rgba(2,132,199,.15);">
+      <div class="card-body p-4">
+        <h6 style="font-weight:700;color:var(--info);margin-bottom:.75rem;">
+          <i class="fa-solid fa-circle-info me-2"></i>What happens next?
+        </h6>
+        <ul style="margin:0;">
+          <li>Your image will be optimized for each platform automatically</li>
+          <li>Instagram: image cropped to 1080×1080 square</li>
+          <li>Telegram: image sent with caption to your chat/channel</li>
+          <li>All posts include the caption you provided</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <form method="POST" id="previewForm">
+      <input type="hidden" name="edited_preview_data" id="editedPreviewData">
+      <input type="hidden" name="edited_caption" id="editedCaptionHidden">
+      <div class="d-flex gap-3 justify-content-between flex-wrap">
+        <button type="submit" name="action" value="cancel" class="btn btn-secondary">
+          <i class="fa-solid fa-xmark me-1"></i> Cancel
+        </button>
+        <button type="submit" name="action" value="confirm" class="btn btn-success" id="confirmBtn">
+          <i class="fa-solid fa-check me-1"></i> Confirm &amp; Post
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Editor state ─────────────────────────────────────────────
+let srcImage = null;
+let adj = { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 };
+let activeFilter = 'Normal';
+
+const FILTERS = [
+  { name:'Normal',    css:'' },
+  { name:'Clarendon', css:'contrast(1.2) saturate(1.35)' },
+  { name:'Gingham',   css:'brightness(1.05) hue-rotate(-10deg) saturate(0.9)' },
+  { name:'Moon',      css:'grayscale(1) brightness(1.1) contrast(1.1)' },
+  { name:'Lark',      css:'brightness(1.1) contrast(0.9) saturate(1.1) sepia(0.1)' },
+  { name:'Reyes',     css:'sepia(0.22) brightness(1.1) contrast(0.85) saturate(0.75)' },
+  { name:'Juno',      css:'saturate(1.4) contrast(1.1) brightness(1.05)' },
+  { name:'Slumber',   css:'saturate(0.66) brightness(1.05) sepia(0.15)' },
+  { name:'Crema',     css:'sepia(0.15) contrast(0.9) brightness(1.05) saturate(0.75)' },
+  { name:'Ludwig',    css:'brightness(1.05) contrast(1.05) saturate(0.8) sepia(0.1)' },
+  { name:'Aden',      css:'hue-rotate(-20deg) saturate(0.85) brightness(1.1) contrast(0.9)' },
+  { name:'Perpetua',  css:'contrast(1.1) saturate(1.1) brightness(1.05) sepia(0.05)' },
+  { name:'Cinematic', css:'contrast(1.3) saturate(0.8) brightness(0.95) sepia(0.15)' },
+  { name:'Fade',      css:'brightness(1.1) contrast(0.85) saturate(0.7) sepia(0.1)' },
+  { name:'Chrome',    css:'saturate(0) contrast(1.2) brightness(1.1)' },
+];
+
+// ── Editor tabs ──────────────────────────────────────────────
+function switchEditorTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.editor-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Adjustments ──────────────────────────────────────────────
+function updateAdj(slider, key) {
+  adj[key] = parseInt(slider.value);
+  document.getElementById('val-' + key).textContent = slider.value;
+  render();
+}
+
+function resetAll() {
+  adj = { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 };
+  ['brightness','contrast','saturation','warmth','vignette','sharpen','fade'].forEach(k => {
+    document.getElementById('sl-' + k).value = 0;
+    document.getElementById('val-' + k).textContent = '0';
+  });
+  activeFilter = 'Normal';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'Normal'));
+  render();
+}
+
+// ── Filter strip ─────────────────────────────────────────────
+function buildFilterStrip() {
+  const strip = document.getElementById('filterStrip');
+  strip.innerHTML = '';
+  FILTERS.forEach(f => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-btn' + (f.name === activeFilter ? ' active' : '');
+    btn.dataset.filter = f.name;
+    const thumb = document.createElement('div');
+    thumb.className = 'filter-thumb';
+    const c = document.createElement('canvas');
+    c.width = 58; c.height = 58;
+    const ctx = c.getContext('2d');
+    ctx.filter = f.css || 'none';
+    ctx.drawImage(srcImage, 0, 0, 58, 58);
+    thumb.appendChild(c);
+    const label = document.createElement('span');
+    label.className = 'filter-label';
+    label.textContent = f.name;
+    btn.appendChild(thumb);
+    btn.appendChild(label);
+    btn.addEventListener('click', () => {
+      activeFilter = f.name;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+    strip.appendChild(btn);
+  });
+}
+
+// ── Main render ──────────────────────────────────────────────
+function render() {
+  if (!srcImage) return;
+  const canvas = document.getElementById('previewCanvas');
+  const size = 1080;
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const filterDef = FILTERS.find(f => f.name === activeFilter);
+  ctx.filter = filterDef?.css || 'none';
+  ctx.drawImage(srcImage, 0, 0, size, size);
+  ctx.filter = 'none';
+  let id = ctx.getImageData(0, 0, size, size);
+  let d  = id.data;
+  const br = adj.brightness / 100;
+  const co = adj.contrast   / 100;
+  const sa = adj.saturation / 100;
+  const wa = adj.warmth     / 100;
+  const fa = adj.fade       / 100;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+    r += br*255; g += br*255; b += br*255;
+    const cf = co + 1;
+    r = (r-128)*cf+128; g = (g-128)*cf+128; b = (b-128)*cf+128;
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    r = lum+(r-lum)*(1+sa); g = lum+(g-lum)*(1+sa); b = lum+(b-lum)*(1+sa);
+    r += wa*30; b -= wa*30;
+    r = r+fa*(128-r)*0.5; g = g+fa*(128-g)*0.5; b = b+fa*(128-b)*0.5;
+    d[i]=Math.min(255,Math.max(0,r)); d[i+1]=Math.min(255,Math.max(0,g)); d[i+2]=Math.min(255,Math.max(0,b));
+  }
+  ctx.putImageData(id, 0, 0);
+  if (adj.sharpen > 0) {
+    const sh = adj.sharpen/100;
+    const tmp = document.createElement('canvas'); tmp.width=size; tmp.height=size;
+    const tc = tmp.getContext('2d');
+    tc.filter = `blur(${1+sh}px)`; tc.drawImage(canvas,0,0); tc.filter='none';
+    const blurred = tc.getImageData(0,0,size,size).data;
+    const sharp = ctx.getImageData(0,0,size,size); const sd=sharp.data; const amt=sh*1.5;
+    for(let i=0;i<sd.length;i+=4){
+      sd[i]=Math.min(255,Math.max(0,sd[i]+(sd[i]-blurred[i])*amt));
+      sd[i+1]=Math.min(255,Math.max(0,sd[i+1]+(sd[i+1]-blurred[i+1])*amt));
+      sd[i+2]=Math.min(255,Math.max(0,sd[i+2]+(sd[i+2]-blurred[i+2])*amt));
+    }
+    ctx.putImageData(sharp,0,0);
+  }
+  if (adj.vignette > 0) {
+    const v = adj.vignette/100;
+    const grad = ctx.createRadialGradient(size/2,size/2,size*0.35,size/2,size/2,size*0.75);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(1,`rgba(0,0,0,${v*0.75})`);
+    ctx.fillStyle=grad; ctx.fillRect(0,0,size,size);
+  }
+}
+
+// ── Load image on page load ──────────────────────────────────
+window.addEventListener('load', function() {
+  // Normalise path: replace backslashes, ensure leading slash
+  let rawPath = {{ image_path_url | tojson }};
+  rawPath = rawPath.replace(/\\/g, '/');
+  if (!rawPath.startsWith('/') && !rawPath.startsWith('http')) {
+    rawPath = '/' + rawPath;
+  }
+
+  const img = new Image();
+  img.onload = () => { srcImage = img; buildFilterStrip(); render(); };
+  img.onerror = () => {
+    console.error('Preview image failed to load:', rawPath);
+    document.getElementById('previewCanvas').insertAdjacentHTML(
+      'afterend',
+      '<p style="color:red;font-size:.8rem;margin-top:.5rem;">⚠️ Could not load image preview. Path: ' + rawPath + '</p>'
+    );
+  };
+  img.src = rawPath;
+});
+
+// ── Form submit — bake canvas ────────────────────────────────
+document.getElementById('previewForm').addEventListener('submit', function(e) {
+  const action = e.submitter ? e.submitter.value : '';
+  if (action === 'confirm' && srcImage) {
+    document.getElementById('editedPreviewData').value =
+      document.getElementById('previewCanvas').toDataURL('image/jpeg', 0.95);
+  }
+  // Always pass the edited caption
+  const captionEl = document.getElementById('previewCaptionEdit');
+  if (captionEl) {
+    document.getElementById('editedCaptionHidden').value = captionEl.value;
+  }
+});
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     AI CAPTION GENERATOR MODAL (Preview Page)
+══════════════════════════════════════════════════════════ -->
+<style>
+.cm-overlay {
+  display:none; position:fixed; inset:0; z-index:9999;
+  background:rgba(15,15,35,.55); backdrop-filter:blur(6px);
+  overflow-y:auto; padding:2rem 1rem;
+  align-items:flex-start; justify-content:center;
+}
+.cm-overlay.open { display:flex; }
+.cm-box {
+  background:#ffffff; color:#1e1e2e;
+  border-radius:18px; width:100%; max-width:660px;
+  box-shadow:0 32px 80px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.08);
+  overflow:hidden; animation:cmSlideIn .22s ease;
+}
+@keyframes cmSlideIn {
+  from { opacity:0; transform:translateY(-18px) scale(.97); }
+  to   { opacity:1; transform:translateY(0)     scale(1);   }
+}
+.cm-header {
+  padding:1.25rem 1.5rem 1.1rem; border-bottom:1.5px solid #f0f0f5;
+  display:flex; align-items:center; justify-content:space-between;
+  background:linear-gradient(135deg,#f8f6ff 0%,#fff 100%);
+}
+.cm-title { font-size:1.05rem; font-weight:800; color:#1e1e2e; margin:0; }
+.cm-subtitle { font-size:.78rem; color:#6b7280; margin:.2rem 0 0; }
+.cm-close {
+  width:32px; height:32px; border-radius:50%; border:none;
+  background:#f3f4f6; color:#6b7280; font-size:.9rem;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:background .15s, color .15s; flex-shrink:0;
+}
+.cm-close:hover { background:#e5e7eb; color:#1e1e2e; }
+.cm-section { padding:1.1rem 1.5rem; border-bottom:1.5px solid #f0f0f5; }
+.cm-section-label { font-size:.78rem; font-weight:700; color:#374151; margin-bottom:.65rem; text-transform:uppercase; letter-spacing:.04em; }
+.cm-chips { display:flex; flex-wrap:wrap; gap:.45rem; }
+.cm-chip {
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.38rem .85rem; border-radius:50px;
+  border:1.5px solid #e5e7eb; background:#f9fafb;
+  color:#374151; font-size:.8rem; font-weight:600;
+  cursor:pointer; user-select:none; transition:all .15s;
+}
+.cm-chip:hover { border-color:#c4b5fd; background:#faf5ff; }
+.cm-chip.selected { border-color:#7c5cfc; background:#f3f0ff; color:#5b21b6; }
+.cm-chip input { display:none; }
+.cm-action { padding:.9rem 1.5rem; border-bottom:1.5px solid #f0f0f5; display:flex; align-items:center; gap:1rem; background:#fafafa; }
+.cm-gen-btn {
+  display:inline-flex; align-items:center; gap:.55rem;
+  padding:.6rem 1.4rem; border-radius:50px; border:none;
+  background:linear-gradient(135deg,#7c5cfc,#a78bfa);
+  color:#fff; font-size:.875rem; font-weight:700;
+  cursor:pointer; transition:opacity .15s, transform .1s;
+  box-shadow:0 4px 14px rgba(124,92,252,.35);
+}
+.cm-gen-btn:hover:not(:disabled) { opacity:.9; transform:translateY(-1px); }
+.cm-gen-btn:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+.cm-status { font-size:.78rem; color:#6b7280; }
+.cm-results { padding:1.25rem 1.5rem; max-height:380px; overflow-y:auto; }
+.cm-placeholder { text-align:center; padding:2.5rem 1rem; color:#9ca3af; }
+.cm-placeholder i { font-size:2.2rem; opacity:.35; display:block; margin-bottom:.75rem; }
+.cm-card {
+  border:1.5px solid #e5e7eb; border-radius:12px;
+  padding:1rem 1.1rem; margin-bottom:.75rem;
+  background:#fff; transition:border-color .15s, box-shadow .15s;
+}
+.cm-card:hover { border-color:#c4b5fd; box-shadow:0 2px 12px rgba(124,92,252,.1); }
+.cm-card.cm-selected { border-color:#7c5cfc; box-shadow:0 2px 16px rgba(124,92,252,.18); background:#faf8ff; }
+.cm-card-header { display:flex; align-items:center; gap:.5rem; margin-bottom:.55rem; }
+.cm-card-badge {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.2rem .65rem; border-radius:50px;
+  font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+}
+.cm-card-desc { font-size:.72rem; color:#9ca3af; margin-left:auto; }
+.cm-card-text { font-size:.875rem; color:#1f2937; line-height:1.65; }
+.cm-card-actions { display:flex; gap:.5rem; margin-top:.7rem; flex-wrap:wrap; }
+.cm-use-btn {
+  padding:.32rem .85rem; border-radius:50px;
+  border:1.5px solid #7c5cfc; background:transparent; color:#7c5cfc;
+  font-size:.75rem; font-weight:700; cursor:pointer; transition:all .15s;
+}
+.cm-use-btn:hover { background:#7c5cfc; color:#fff; }
+.cm-copy-btn {
+  padding:.32rem .85rem; border-radius:50px;
+  border:1.5px solid #e5e7eb; background:transparent; color:#6b7280;
+  font-size:.75rem; font-weight:700; cursor:pointer; transition:all .15s;
+}
+.cm-copy-btn:hover { border-color:#9ca3af; color:#374151; }
+.cm-desc-bar { display:none; padding:.7rem 1.5rem; border-top:1.5px solid #f0f0f5; background:#f8f6ff; font-size:.78rem; color:#5b21b6; }
+.cm-footer { padding:.9rem 1.5rem; border-top:1.5px solid #f0f0f5; display:flex; justify-content:flex-end; background:#fafafa; }
+.cm-close-btn {
+  padding:.48rem 1.2rem; border-radius:50px;
+  border:1.5px solid #e5e7eb; background:#fff; color:#374151;
+  font-size:.875rem; font-weight:600; cursor:pointer; transition:all .15s;
+}
+.cm-close-btn:hover { background:#f3f4f6; border-color:#d1d5db; }
+</style>
+
+<div id="captionModal" class="cm-overlay">
+  <div class="cm-box">
+    <div class="cm-header">
+      <div>
+        <p class="cm-title"><i class="fa-solid fa-wand-magic-sparkles me-2" style="color:#7c5cfc;"></i>AI Caption Generator</p>
+        <p class="cm-subtitle">Gemini Vision analyses your image and writes captions in 5 styles</p>
+      </div>
+      <button class="cm-close" onclick="closeCaptionModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="cm-section">
+      <div class="cm-section-label">Select styles to generate</div>
+      <div class="cm-chips" id="styleCheckboxes">
+        <label class="cm-chip selected"><input type="checkbox" value="engaging" checked> <i class="fa-solid fa-fire" style="color:#f97316;"></i> Engaging</label>
+        <label class="cm-chip selected"><input type="checkbox" value="professional" checked> <i class="fa-solid fa-briefcase" style="color:#0284c7;"></i> Professional</label>
+        <label class="cm-chip selected"><input type="checkbox" value="storytelling" checked> <i class="fa-solid fa-book-open" style="color:#7c5cfc;"></i> Storytelling</label>
+        <label class="cm-chip selected"><input type="checkbox" value="minimal" checked> <i class="fa-solid fa-minus" style="color:#64748b;"></i> Minimal</label>
+        <label class="cm-chip selected"><input type="checkbox" value="funny" checked> <i class="fa-solid fa-face-laugh" style="color:#eab308;"></i> Funny / Witty</label>
+      </div>
+    </div>
+
+    <div class="cm-action">
+      <button type="button" id="runGenBtn" class="cm-gen-btn" onclick="runCaptionGeneration()">
+        <i class="fa-solid fa-sparkles" id="runGenIcon"></i>
+        <span id="runGenLabel">Generate Captions</span>
+      </button>
+      <span id="captionGenStatus" class="cm-status"></span>
+    </div>
+
+    <div class="cm-results" id="captionResults">
+      <div id="captionPlaceholder" class="cm-placeholder">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        Click "Generate Captions" to analyse your image with AI
+      </div>
+      <div id="captionCards" style="display:none;"></div>
+    </div>
+
+    <div id="imgDescSection" class="cm-desc-bar">
+      <i class="fa-solid fa-eye me-1"></i>
+      <strong>Gemini sees:</strong> <span id="imgDescText"></span>
+    </div>
+
+    <div class="cm-footer">
+      <button class="cm-close-btn" onclick="closeCaptionModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const _imagePath = {{ image_path_url | tojson }};
+const _platforms = {{ platforms | tojson }};
+
+document.querySelectorAll('.cm-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const cb = chip.querySelector('input[type=checkbox]');
+    cb.checked = !cb.checked;
+    chip.classList.toggle('selected', cb.checked);
+  });
+});
+
+function openPreviewCaptionModal() {
+  document.getElementById('captionModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeCaptionModal() {
+  document.getElementById('captionModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('captionModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCaptionModal();
+});
+
+async function runCaptionGeneration() {
+  const styles = Array.from(document.querySelectorAll('#styleCheckboxes input:checked')).map(cb => cb.value);
+  if (!styles.length) { alert('Select at least one style.'); return; }
+
+  const userHint = document.getElementById('previewCaptionEdit').value;
+  const btn = document.getElementById('runGenBtn');
+  const icon = document.getElementById('runGenIcon');
+  const label = document.getElementById('runGenLabel');
+  const status = document.getElementById('captionGenStatus');
+
+  btn.disabled = true;
+  icon.className = 'fa-solid fa-circle-notch spinning';
+  label.textContent = 'Analysing image…';
+  status.textContent = 'This takes 3-8 seconds';
+  document.getElementById('captionPlaceholder').style.display = 'none';
+  document.getElementById('captionCards').style.display = 'none';
+  document.getElementById('imgDescSection').style.display = 'none';
+
+  try {
+    const resp = await fetch('/generate-captions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_path: _imagePath, user_hint: userHint, styles })
+    });
+    const data = await resp.json();
+
+    if (!data.success) {
+      status.textContent = '❌ ' + (data.error || 'Failed');
+      return;
+    }
+    renderCaptionCards(data.captions);
+    if (data.image_description) {
+      document.getElementById('imgDescText').textContent = data.image_description;
+      document.getElementById('imgDescSection').style.display = 'block';
+    }
+    status.textContent = `✅ ${Object.keys(data.captions).length} captions generated`;
+  } catch(err) {
+    status.textContent = '❌ ' + err.message;
+  } finally {
+    btn.disabled = false;
+    icon.className = 'fa-solid fa-sparkles';
+    label.textContent = 'Regenerate';
+  }
+}
+
+function renderCaptionCards(captions) {
+  const container = document.getElementById('captionCards');
+  container.innerHTML = '';
+  Object.entries(captions).forEach(([key, cap]) => {
+    const card = document.createElement('div');
+    card.className = 'cm-card';
+    card.dataset.captionText = cap.text;
+    card.innerHTML = `
+      <div class="cm-card-header">
+        <span class="cm-card-badge" style="background:${cap.color}18;color:${cap.color};">
+          <i class="fa-solid ${cap.icon}"></i>${cap.label}
+        </span>
+        <span class="cm-card-desc">${cap.description}</span>
+      </div>
+      <div class="cm-card-text">${escapeHtml(cap.text)}</div>
+      <div class="cm-card-actions">
+        <button class="cm-use-btn" onclick="useCaption(this)"><i class="fa-solid fa-check me-1"></i>Use this</button>
+        <button class="cm-copy-btn" onclick="copyCaption('${escapeAttr(cap.text)}', this)"><i class="fa-solid fa-copy me-1"></i>Copy</button>
+      </div>`;
+    container.appendChild(card);
+  });
+  container.style.display = 'block';
+}
+
+function useCaption(btn) {
+  const card = btn.closest('.cm-card');
+  document.getElementById('previewCaptionEdit').value = card.dataset.captionText;
+  document.querySelectorAll('.cm-card').forEach(c => c.classList.remove('cm-selected'));
+  card.classList.add('cm-selected');
+  setTimeout(closeCaptionModal, 400);
+}
+
+async function copyCaption(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Copied!';
+    btn.style.color = '#16a34a'; btn.style.borderColor = '#16a34a';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.color=''; btn.style.borderColor=''; }, 1500);
+  } catch(e) { alert('Copy failed'); }
+}
+
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escapeAttr(s) { return s.replace(/'/g,"\\'").replace(/\n/g,' '); }
+</script>
+{% endblock %}

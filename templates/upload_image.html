@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+{% block title %}Upload Image{% endblock %}
+
+{% block head %}
+<style>
+/* ── Editor layout ── */
+.editor-wrap {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+@media(max-width:768px){ .editor-wrap { flex-direction: column; } }
+
+.editor-canvas-col {
+  flex: 0 0 auto;
+  width: 320px;
+  max-width: 100%;
+}
+@media(max-width:768px){ .editor-canvas-col { width: 100%; } }
+
+.editor-controls-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Canvas wrapper */
+.canvas-wrap {
+  position: relative;
+  background: #f0eeff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.canvas-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  object-fit: contain;
+}
+.canvas-placeholder {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2rem;
+  cursor: pointer;
+}
+.canvas-placeholder i { font-size: 2.5rem; margin-bottom: .75rem; display: block; opacity: .35; }
+
+/* Filter strip */
+.filter-strip {
+  display: flex;
+  gap: .6rem;
+  overflow-x: auto;
+  padding-bottom: .5rem;
+  scrollbar-width: thin;
+}
+.filter-strip::-webkit-scrollbar { height: 4px; }
+.filter-strip::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 2px; }
+
+.filter-btn {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.filter-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  overflow: hidden;
+  transition: var(--transition);
+  background: var(--bg-secondary);
+}
+.filter-btn canvas {
+  width: 60px !important;
+  height: 60px !important;
+  display: block;
+}
+.filter-btn.active .filter-thumb,
+.filter-btn:hover .filter-thumb {
+  border-color: var(--accent);
+}
+.filter-label {
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.filter-btn.active .filter-label { color: var(--accent); }
+
+/* Sliders */
+.adj-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .85rem;
+}
+.adj-icon {
+  width: 28px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: .85rem;
+  flex-shrink: 0;
+}
+.adj-label {
+  width: 80px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.adj-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+.adj-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(124,92,252,.4);
+}
+.adj-slider::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+.adj-value {
+  width: 32px;
+  text-align: right;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Tabs */
+.editor-tabs {
+  display: flex;
+  gap: .25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .5rem;
+}
+.editor-tab {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: .35rem .75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: var(--transition);
+}
+.editor-tab.active {
+  color: var(--accent);
+  background: rgba(124,92,252,.08);
+}
+.editor-tab:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(124,92,252,.04);
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-10 col-lg-11">
+
+    <!-- Header -->
+    <div class="mb-4">
+      <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);font-size:.85rem;text-decoration:none;">
+        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+      </a>
+      <h2 style="font-weight:800;letter-spacing:-.5px;margin-top:.75rem;margin-bottom:.25rem;">
+        <i class="fa-solid fa-upload me-2" style="color:var(--accent);"></i>Upload &amp; Edit Image
+      </h2>
+      <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">
+        Upload a photo, adjust it with filters and tools, then post to your platforms.
+      </p>
+    </div>
+
+    <!-- ── Editor card ── -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <i class="fa-solid fa-sliders me-2" style="color:var(--accent);"></i>Image Editor
+      </div>
+      <div class="card-body p-4">
+
+        <!-- Drop zone (shown before image is picked) -->
+        <div id="dropZone"
+             style="border:2px dashed var(--border);border-radius:var(--radius);padding:3rem 1rem;text-align:center;cursor:pointer;transition:var(--transition);"
+             onclick="document.getElementById('fileInput').click()">
+          <i class="fa-solid fa-cloud-arrow-up" style="font-size:2.5rem;color:var(--text-muted);margin-bottom:.75rem;display:block;opacity:.5;"></i>
+          <p style="color:var(--text-secondary);font-size:.95rem;font-weight:600;margin:0;">Click to browse or drag &amp; drop</p>
+          <p style="color:var(--text-muted);font-size:.78rem;margin:.35rem 0 0;">JPG, PNG, GIF, WebP — max 16 MB</p>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;">
+
+        <!-- Editor (hidden until image picked) -->
+        <div id="editorSection" style="display:none;">
+
+          <!-- Image preview + controls side by side -->
+          <div class="editor-wrap">
+
+            <!-- Left: canvas -->
+            <div class="editor-canvas-col">
+              <div class="canvas-wrap">
+                <canvas id="mainCanvas"></canvas>
+              </div>
+              <div class="d-flex gap-2 mt-2">
+                <button type="button" class="btn btn-secondary btn-sm w-100" onclick="resetAll()">
+                  <i class="fa-solid fa-rotate-left me-1"></i> Reset All
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('fileInput').click()" title="Change image">
+                  <i class="fa-solid fa-image"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: tabs + controls -->
+            <div class="editor-controls-col">
+
+              <!-- Tabs -->
+              <div class="editor-tabs">
+                <button class="editor-tab active" onclick="switchTab('filters', this)">
+                  <i class="fa-solid fa-palette me-1"></i>Filters
+                </button>
+                <button class="editor-tab" onclick="switchTab('adjust', this)">
+                  <i class="fa-solid fa-sliders me-1"></i>Adjust
+                </button>
+              </div>
+
+              <!-- Filters tab -->
+              <div id="tab-filters" class="tab-panel active">
+                <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;">Tap a filter to apply it to your photo.</p>
+                <div class="filter-strip" id="filterStrip">
+                  <!-- Populated by JS after image loads -->
+                </div>
+              </div>
+
+              <!-- Adjust tab -->
+              <div id="tab-adjust" class="tab-panel">
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-sun"></i></div>
+                  <div class="adj-label">Brightness</div>
+                  <input type="range" class="adj-slider" id="sl-brightness" min="-100" max="100" value="0" oninput="updateAdj(this,'brightness')">
+                  <div class="adj-value" id="val-brightness">0</div>
+                </div>
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-circle-half-stroke"></i></div>
+                  <div class="adj-label">Contrast</div>
+                  <input type="range" class="adj-slider" id="sl-contrast" min="-100" max="100" value="0" oninput="updateAdj(this,'contrast')">
+                  <div class="adj-value" id="val-contrast">0</div>
+                </div>
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-droplet"></i></div>
+                  <div class="adj-label">Saturation</div>
+                  <input type="range" class="adj-slider" id="sl-saturation" min="-100" max="100" value="0" oninput="updateAdj(this,'saturation')">
+                  <div class="adj-value" id="val-saturation">0</div>
+                </div>
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-temperature-half"></i></div>
+                  <div class="adj-label">Warmth</div>
+                  <input type="range" class="adj-slider" id="sl-warmth" min="-100" max="100" value="0" oninput="updateAdj(this,'warmth')">
+                  <div class="adj-value" id="val-warmth">0</div>
+                </div>
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-eye"></i></div>
+                  <div class="adj-label">Vignette</div>
+                  <input type="range" class="adj-slider" id="sl-vignette" min="0" max="100" value="0" oninput="updateAdj(this,'vignette')">
+                  <div class="adj-value" id="val-vignette">0</div>
+                </div>
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                  <div class="adj-label">Sharpen</div>
+                  <input type="range" class="adj-slider" id="sl-sharpen" min="0" max="100" value="0" oninput="updateAdj(this,'sharpen')">
+                  <div class="adj-value" id="val-sharpen">0</div>
+                </div>
+
+                <div class="adj-row">
+                  <div class="adj-icon"><i class="fa-solid fa-cloud"></i></div>
+                  <div class="adj-label">Fade</div>
+                  <input type="range" class="adj-slider" id="sl-fade" min="0" max="100" value="0" oninput="updateAdj(this,'fade')">
+                  <div class="adj-value" id="val-fade">0</div>
+                </div>
+
+              </div><!-- /adjust tab -->
+            </div><!-- /controls col -->
+          </div><!-- /editor-wrap -->
+        </div><!-- /editorSection -->
+
+      </div>
+    </div>
+
+    <!-- ── Post settings ── -->
+    <div class="card">
+      <div class="card-header">
+        <i class="fa-solid fa-paper-plane me-2" style="color:var(--accent);"></i>Post Settings
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" id="postForm" enctype="multipart/form-data">
+
+          <!-- Hidden: edited image as base64 data URL -->
+          <input type="hidden" id="editedImageData" name="edited_image_data" value="">
+          <!-- Hidden: original file fallback -->
+          <input type="file" id="hiddenFile" name="image" style="display:none;" accept="image/*">
+
+          <div class="mb-4">
+            <label for="caption" class="form-label">
+              Caption <span style="color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span>
+            </label>
+            <textarea class="form-control" id="caption" name="caption" rows="3"
+                      placeholder="Write a caption for your post…"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="platform-card" style="cursor:pointer;display:block;">
+              <div class="d-flex align-items-center gap-2">
+                <input type="checkbox" class="form-check-input" id="auto_hashtags" name="auto_hashtags" checked>
+                <i class="fa-solid fa-hashtag" style="color:var(--accent);"></i>
+                <div>
+                  <span style="font-weight:600;font-size:.875rem;">Auto-generate hashtags</span>
+                  <div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem;">Adds relevant hashtags based on your caption</div>
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Post to <span style="color:var(--danger);">*</span></label>
+            <div class="row g-2 mt-1">
+              <div class="col-6">
+                <label class="platform-card" style="cursor:pointer;display:block;">
+                  <div class="d-flex align-items-center gap-2">
+                    <input type="checkbox" class="form-check-input" name="platforms" value="instagram"
+                           {% if ig_connected %}checked{% else %}disabled{% endif %}>
+                    <i class="fa-brands fa-instagram" style="font-size:1.1rem;color:#e1306c;"></i>
+                    <span style="font-weight:600;font-size:.875rem;">Instagram</span>
+                    {% if not ig_connected %}
+                      <span class="badge bg-warning ms-auto">Not connected</span>
+                    {% else %}
+                      <span class="badge bg-success ms-auto">Connected</span>
+                    {% endif %}
+                  </div>
+                </label>
+              </div>
+              <div class="col-6">
+                <label class="platform-card" style="cursor:pointer;display:block;">
+                  <div class="d-flex align-items-center gap-2">
+                    <input type="checkbox" class="form-check-input" name="platforms" value="telegram"
+                           {% if telegram_connected %}checked{% else %}disabled{% endif %}>
+                    <i class="fa-brands fa-telegram" style="font-size:1.1rem;color:#229ed9;"></i>
+                    <span style="font-weight:600;font-size:.875rem;">Telegram</span>
+                    {% if not telegram_connected %}
+                      <span class="badge bg-warning ms-auto">Not connected</span>
+                    {% else %}
+                      <span class="badge bg-success ms-auto">Connected</span>
+                    {% endif %}
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Schedule <span style="color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+            <div class="row g-2">
+              <div class="col-6">
+                <input type="date" class="form-control" name="schedule_date">
+                <div class="form-text">Date</div>
+              </div>
+              <div class="col-6">
+                <input type="time" class="form-control" name="schedule_time">
+                <div class="form-text">Time</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-primary" id="submitBtn">
+              <i class="fa-solid fa-eye me-1"></i> Preview &amp; Post
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ════════════════════════════════════════════════════════════
+//  State
+// ════════════════════════════════════════════════════════════
+let srcImage   = null;   // original HTMLImageElement
+let adj = { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 };
+let activeFilter = 'Normal';
+
+const FILTERS = [
+  { name:'Normal',    css:'' },
+  { name:'Clarendon', css:'contrast(1.2) saturate(1.35)' },
+  { name:'Gingham',   css:'brightness(1.05) hue-rotate(-10deg) saturate(0.9)' },
+  { name:'Moon',      css:'grayscale(1) brightness(1.1) contrast(1.1)' },
+  { name:'Lark',      css:'brightness(1.1) contrast(0.9) saturate(1.1) sepia(0.1)' },
+  { name:'Reyes',     css:'sepia(0.22) brightness(1.1) contrast(0.85) saturate(0.75)' },
+  { name:'Juno',      css:'saturate(1.4) contrast(1.1) brightness(1.05)' },
+  { name:'Slumber',   css:'saturate(0.66) brightness(1.05) sepia(0.15)' },
+  { name:'Crema',     css:'sepia(0.15) contrast(0.9) brightness(1.05) saturate(0.75)' },
+  { name:'Ludwig',    css:'brightness(1.05) contrast(1.05) saturate(0.8) sepia(0.1)' },
+  { name:'Aden',      css:'hue-rotate(-20deg) saturate(0.85) brightness(1.1) contrast(0.9)' },
+  { name:'Perpetua',  css:'contrast(1.1) saturate(1.1) brightness(1.05) sepia(0.05)' },
+  { name:'Cinematic', css:'contrast(1.3) saturate(0.8) brightness(0.95) sepia(0.15)' },
+  { name:'Fade',      css:'brightness(1.1) contrast(0.85) saturate(0.7) sepia(0.1)' },
+  { name:'Chrome',    css:'saturate(0) contrast(1.2) brightness(1.1)' },
+];
+
+// ════════════════════════════════════════════════════════════
+//  File input
+// ════════════════════════════════════════════════════════════
+const fileInput  = document.getElementById('fileInput');
+const hiddenFile = document.getElementById('hiddenFile');
+const dropZone   = document.getElementById('dropZone');
+
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) loadImage(fileInput.files[0]); });
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.style.borderColor='var(--accent)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor='var(--border)'; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.style.borderColor='var(--border)';
+  if(e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
+});
+
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      srcImage = img;
+      dropZone.style.display = 'none';
+      document.getElementById('editorSection').style.display = 'block';
+      buildFilterStrip();
+      render();
+      // sync to hidden file input
+      const dt = new DataTransfer(); dt.items.add(file);
+      hiddenFile.files = dt.files;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ════════════════════════════════════════════════════════════
+//  Tabs
+// ════════════════════════════════════════════════════════════
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.editor-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════
+//  Adjustments
+// ════════════════════════════════════════════════════════════
+function updateAdj(slider, key) {
+  adj[key] = parseInt(slider.value);
+  document.getElementById('val-' + key).textContent = slider.value;
+  render();
+}
+
+function resetAll() {
+  adj = { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 };
+  ['brightness','contrast','saturation','warmth','vignette','sharpen','fade'].forEach(k => {
+    document.getElementById('sl-' + k).value = 0;
+    document.getElementById('val-' + k).textContent = '0';
+  });
+  activeFilter = 'Normal';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'Normal'));
+  render();
+}
+
+// ════════════════════════════════════════════════════════════
+//  Filter strip
+// ════════════════════════════════════════════════════════════
+function buildFilterStrip() {
+  const strip = document.getElementById('filterStrip');
+  strip.innerHTML = '';
+  FILTERS.forEach(f => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-btn' + (f.name === activeFilter ? ' active' : '');
+    btn.dataset.filter = f.name;
+
+    const thumb = document.createElement('div');
+    thumb.className = 'filter-thumb';
+
+    const c = document.createElement('canvas');
+    c.width = 60; c.height = 60;
+    const ctx = c.getContext('2d');
+    ctx.filter = f.css || 'none';
+    ctx.drawImage(srcImage, 0, 0, 60, 60);
+    thumb.appendChild(c);
+
+    const label = document.createElement('span');
+    label.className = 'filter-label';
+    label.textContent = f.name;
+
+    btn.appendChild(thumb);
+    btn.appendChild(label);
+    btn.addEventListener('click', () => {
+      activeFilter = f.name;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+    strip.appendChild(btn);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+//  Main render
+// ════════════════════════════════════════════════════════════
+function render() {
+  if (!srcImage) return;
+
+  const canvas = document.getElementById('mainCanvas');
+  const size = 1080;
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Draw source with filter
+  const filterDef = FILTERS.find(f => f.name === activeFilter);
+  ctx.filter = filterDef?.css || 'none';
+  ctx.drawImage(srcImage, 0, 0, size, size);
+  ctx.filter = 'none';
+
+  // Get pixel data for manual adjustments
+  let id = ctx.getImageData(0, 0, size, size);
+  let d  = id.data;
+
+  const br = adj.brightness / 100;   // -1..1
+  const co = adj.contrast   / 100;   // -1..1
+  const sa = adj.saturation / 100;   // -1..1
+  const wa = adj.warmth     / 100;   // -1..1
+  const fa = adj.fade       / 100;   //  0..1
+  const sh = adj.sharpen    / 100;   //  0..1
+
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+
+    // Brightness
+    r += br * 255; g += br * 255; b += br * 255;
+
+    // Contrast  (pivot at 128)
+    const cf = (co + 1);
+    r = (r - 128) * cf + 128;
+    g = (g - 128) * cf + 128;
+    b = (b - 128) * cf + 128;
+
+    // Saturation via luminance
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    r = lum + (r - lum) * (1 + sa);
+    g = lum + (g - lum) * (1 + sa);
+    b = lum + (b - lum) * (1 + sa);
+
+    // Warmth (shift red/blue)
+    r += wa * 30;
+    b -= wa * 30;
+
+    // Fade (lift shadows toward grey)
+    r = r + fa * (128 - r) * 0.5;
+    g = g + fa * (128 - g) * 0.5;
+    b = b + fa * (128 - b) * 0.5;
+
+    d[i]   = Math.min(255, Math.max(0, r));
+    d[i+1] = Math.min(255, Math.max(0, g));
+    d[i+2] = Math.min(255, Math.max(0, b));
+  }
+  ctx.putImageData(id, 0, 0);
+
+  // Sharpen (unsharp mask via second canvas)
+  if (sh > 0) {
+    const tmp = document.createElement('canvas');
+    tmp.width = size; tmp.height = size;
+    const tc = tmp.getContext('2d');
+    tc.filter = `blur(${1 + sh}px)`;
+    tc.drawImage(canvas, 0, 0);
+    tc.filter = 'none';
+    const blurred = tc.getImageData(0, 0, size, size).data;
+    const sharp   = ctx.getImageData(0, 0, size, size);
+    const sd = sharp.data;
+    const amt = sh * 1.5;
+    for (let i = 0; i < sd.length; i += 4) {
+      sd[i]   = Math.min(255, Math.max(0, sd[i]   + (sd[i]   - blurred[i])   * amt));
+      sd[i+1] = Math.min(255, Math.max(0, sd[i+1] + (sd[i+1] - blurred[i+1]) * amt));
+      sd[i+2] = Math.min(255, Math.max(0, sd[i+2] + (sd[i+2] - blurred[i+2]) * amt));
+    }
+    ctx.putImageData(sharp, 0, 0);
+  }
+
+  // Vignette
+  if (adj.vignette > 0) {
+    const v = adj.vignette / 100;
+    const grad = ctx.createRadialGradient(size/2, size/2, size*0.35, size/2, size/2, size*0.75);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(0,0,0,${v * 0.75})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  Form submit — bake canvas to hidden field
+// ════════════════════════════════════════════════════════════
+document.getElementById('postForm').addEventListener('submit', function(e) {
+  if (srcImage) {
+    const canvas = document.getElementById('mainCanvas');
+    document.getElementById('editedImageData').value = canvas.toDataURL('image/jpeg', 0.95);
+  }
+});
+</script>
+{% endblock %}

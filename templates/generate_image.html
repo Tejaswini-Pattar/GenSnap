@@ -1,0 +1,1541 @@
+{% extends "base.html" %}
+{% block title %}Generate Image{% endblock %}
+
+{% block head %}
+<style>
+.mode-tab-bar { display:flex; gap:.5rem; margin-bottom:1.5rem; }
+.mode-tab {
+  flex:1; padding:.65rem 1rem; border-radius:var(--radius); border:1.5px solid var(--border);
+  background:var(--bg-secondary); color:var(--text-secondary); font-weight:600; font-size:.875rem;
+  cursor:pointer; text-align:center; transition:var(--transition);
+}
+.mode-tab.active {
+  border-color:var(--accent); background:rgba(124,92,252,.08); color:var(--accent);
+}
+.mode-tab:hover:not(.active) { border-color:var(--border-hover); color:var(--text-primary); }
+.mode-panel { display:none; }
+.mode-panel.active { display:block; }
+
+/* Upload drop zone */
+.drop-zone {
+  border:2px dashed var(--border); border-radius:var(--radius);
+  padding:2.5rem 1rem; text-align:center; cursor:pointer; transition:var(--transition);
+}
+.drop-zone:hover { border-color:var(--accent); background:rgba(124,92,252,.03); }
+
+/* Editor layout */
+.editor-wrap { display:flex; gap:1.5rem; align-items:flex-start; }
+@media(max-width:768px){ .editor-wrap { flex-direction:column; } }
+.editor-canvas-col { flex:0 0 auto; width:300px; max-width:100%; }
+@media(max-width:768px){ .editor-canvas-col { width:100%; } }
+.editor-controls-col { flex:1; min-width:0; }
+.canvas-wrap {
+  position:relative; background:#f0eeff; border:1px solid var(--border);
+  border-radius:var(--radius); overflow:hidden; width:100%; aspect-ratio:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.canvas-wrap canvas { width:100% !important; height:100% !important; display:block; }
+
+/* Filter strip */
+.filter-strip { display:flex; gap:.6rem; overflow-x:auto; padding-bottom:.5rem; scrollbar-width:thin; }
+.filter-strip::-webkit-scrollbar { height:4px; }
+.filter-strip::-webkit-scrollbar-thumb { background:var(--border-hover); border-radius:2px; }
+.filter-btn { flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:.35rem; cursor:pointer; border:none; background:none; padding:0; }
+.filter-thumb { width:58px; height:58px; border-radius:10px; border:2px solid transparent; overflow:hidden; transition:var(--transition); background:var(--bg-secondary); }
+.filter-btn canvas { width:58px !important; height:58px !important; display:block; }
+.filter-btn.active .filter-thumb, .filter-btn:hover .filter-thumb { border-color:var(--accent); }
+.filter-label { font-size:.68rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.filter-btn.active .filter-label { color:var(--accent); }
+
+/* Sliders */
+.adj-row { display:flex; align-items:center; gap:.75rem; margin-bottom:.85rem; }
+.adj-icon { width:24px; text-align:center; color:var(--text-muted); font-size:.82rem; flex-shrink:0; }
+.adj-label { width:76px; font-size:.78rem; font-weight:600; color:var(--text-secondary); flex-shrink:0; }
+.adj-slider { flex:1; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; background:var(--border); outline:none; cursor:pointer; }
+.adj-slider::-webkit-slider-thumb { -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 1px 4px rgba(124,92,252,.4); }
+.adj-slider::-moz-range-thumb { width:15px; height:15px; border-radius:50%; background:var(--accent); cursor:pointer; border:none; }
+.adj-value { width:30px; text-align:right; font-size:.75rem; font-weight:600; color:var(--text-muted); flex-shrink:0; }
+
+/* Editor tabs */
+.editor-tabs { display:flex; gap:.25rem; margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:.5rem; }
+.editor-tab { font-size:.78rem; font-weight:600; color:var(--text-muted); padding:.35rem .75rem; border-radius:var(--radius-sm); cursor:pointer; border:none; background:none; transition:var(--transition); }
+.editor-tab.active { color:var(--accent); background:rgba(124,92,252,.08); }
+.editor-tab:hover:not(.active) { color:var(--text-secondary); background:rgba(124,92,252,.04); }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* Voice input */
+@keyframes voicePulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.4; transform:scale(1.3); }
+}
+@keyframes micRing {
+  0%   { box-shadow:0 0 0 0 rgba(124,92,252,.5); }
+  70%  { box-shadow:0 0 0 10px rgba(124,92,252,0); }
+  100% { box-shadow:0 0 0 0 rgba(124,92,252,0); }
+}
+#micBtn.recording {
+  background:#7c5cfc !important;
+  color:#fff !important;
+  animation:micRing 1.2s infinite;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-9 col-lg-10">
+
+    <!-- Header -->
+    <div class="mb-4">
+      <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);font-size:.85rem;text-decoration:none;">
+        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+      </a>
+      <h2 style="font-weight:800;letter-spacing:-.5px;margin-top:.75rem;margin-bottom:.25rem;">
+        <i class="fa-solid fa-wand-magic-sparkles me-2" style="color:var(--accent);"></i>Create Post
+      </h2>
+      <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">Generate an AI image or upload your own, then edit and post.</p>
+    </div>
+
+    <!-- Mode switcher -->
+    <div class="mode-tab-bar">
+      <div class="mode-tab active" id="tab-ai" onclick="switchMode('ai')">
+        <i class="fa-solid fa-wand-magic-sparkles me-2"></i>AI Generate
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         MODE A — AI Generate
+    ══════════════════════════════════════════════════════ -->
+    <div id="panel-ai" class="mode-panel active">
+      <div class="card">
+        <div class="card-body p-4">
+          <form method="POST" action="{{ url_for('generate_image') }}" id="aiForm">
+            <!-- Hidden field: carries uploaded image data when user picks a photo instead of typing a prompt -->
+            <input type="hidden" name="attached_image_data" id="attachedImageData">
+
+            <div class="mb-4">
+              <label for="prompt" class="form-label">
+                Image Prompt <span id="promptRequired" style="color:var(--danger);">*</span>
+              </label>
+
+              <!-- Prompt input + mic button -->
+              <div style="position:relative;">
+                <textarea class="form-control" id="prompt" name="prompt" rows="3"
+                          placeholder="e.g. A serene sunset over a calm lake with mountains, digital art, vibrant colors… or click 🎤 to speak"
+                          style="padding-right:3rem;"
+                          required></textarea>
+
+                <!-- Mic button -->
+                <button type="button" id="micBtn" onclick="toggleVoiceInput()"
+                  title="Click to speak your prompt"
+                  style="position:absolute;top:.6rem;right:.6rem;width:34px;height:34px;
+                    border-radius:50%;border:none;background:rgba(124,92,252,.12);
+                    color:#7c5cfc;font-size:.95rem;cursor:pointer;
+                    display:flex;align-items:center;justify-content:center;
+                    transition:all .2s;z-index:2;">
+                  <i class="fa-solid fa-microphone" id="micIcon"></i>
+                </button>
+              </div>
+
+              <!-- Voice status bar -->
+              <div id="voiceStatus" style="display:none;margin-top:.4rem;padding:.35rem .75rem;
+                border-radius:6px;background:rgba(124,92,252,.08);border:1px solid rgba(124,92,252,.2);
+                font-size:.78rem;color:#7c5cfc;display:none;align-items:center;gap:.5rem;">
+                <span id="voiceStatusDot" style="width:8px;height:8px;border-radius:50%;
+                  background:#7c5cfc;display:inline-block;animation:voicePulse 1s infinite;"></span>
+                <span id="voiceStatusText">Listening…</span>
+              </div>
+              <div class="form-text">Be descriptive — style, mood, colors, and composition all help.</div>
+
+              <!-- Attachment button -->
+              <div class="d-flex align-items-center gap-2 mt-2">
+                <button type="button" onclick="document.getElementById('aiFileInput').click()"
+                  id="attachBtn"
+                  style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:var(--transition);flex-shrink:0;"
+                  title="Upload image to post">
+                  <i class="fa-solid fa-plus" style="font-size:.8rem;color:var(--text-muted);"></i>
+                </button>
+                <span style="font-size:.78rem;color:var(--text-muted);">
+                  (Upload image with filters)
+                </span>
+              </div>
+              <input type="file" id="aiFileInput" accept="image/*" style="display:none;">
+
+              <!-- Thumbnail preview (shown after image picked) -->
+              <div id="aiImagePreview" style="display:none;margin-top:.75rem;align-items:center;gap:.75rem;">
+                <div style="position:relative;display:inline-block;">
+                  <img id="aiThumb" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--accent);">
+                  <button type="button" onclick="removeAiImage()" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#ef4444;border:none;color:white;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+                <div style="font-size:.78rem;color:var(--accent);font-weight:600;">
+                  <i class="fa-solid fa-circle-check me-1"></i>Image attached — prompt is disabled.<br>
+                  <span style="color:var(--text-muted);font-weight:400;">Click Generate &amp; Preview to continue.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <label for="ai-caption" class="form-label">
+                Caption
+                <span style="color:var(--text-muted);font-weight:400;">(optional)</span>
+              </label>
+              <textarea class="form-control" id="ai-caption" name="caption" rows="3"
+                        placeholder="Write a caption, or use AI to generate one below…"></textarea>
+
+              <!-- ── AI Caption Generator ── -->
+              <div style="margin-top:.75rem;">
+                <button type="button" id="genCaptionBtn" onclick="openCaptionModal()"
+                  style="display:inline-flex;align-items:center;gap:.5rem;padding:.45rem .9rem;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:rgba(124,92,252,.07);color:var(--accent);font-size:.8rem;font-weight:700;cursor:pointer;transition:var(--transition);"
+                  onmouseover="this.style.background='rgba(124,92,252,.15)'"
+                  onmouseout="this.style.background='rgba(124,92,252,.07)'">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  Generate AI Captions
+                </button>
+                <span style="font-size:.75rem;color:var(--text-muted);margin-left:.5rem;">
+                  Powered by Gemini Vision — analyses your image
+                </span>
+              </div>
+            </div>
+
+            <!-- Platforms -->
+            <div class="mb-4">
+              <label class="form-label">Post to <span style="color:var(--danger);">*</span></label>
+              <div class="row g-2 mt-1">
+                <div class="col-6">
+                  <label class="platform-card" style="cursor:pointer;display:block;">
+                    <div class="d-flex align-items-center gap-2">
+                      <input type="checkbox" class="form-check-input" name="platforms" value="instagram"
+                             {% if ig_connected %}checked{% else %}disabled{% endif %}>
+                      <i class="fa-brands fa-instagram" style="font-size:1.1rem;color:#e1306c;"></i>
+                      <span style="font-weight:600;font-size:.875rem;">Instagram</span>
+                      <span class="badge ms-auto {% if ig_connected %}bg-success{% else %}bg-warning{% endif %}">
+                        {% if ig_connected %}Connected{% else %}Not connected{% endif %}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+                <div class="col-6">
+                  <label class="platform-card" style="cursor:pointer;display:block;">
+                    <div class="d-flex align-items-center gap-2">
+                      <input type="checkbox" class="form-check-input" name="platforms" value="telegram"
+                             {% if telegram_connected %}checked{% else %}disabled{% endif %}>
+                      <i class="fa-brands fa-telegram" style="font-size:1.1rem;color:#229ed9;"></i>
+                      <span style="font-weight:600;font-size:.875rem;">Telegram</span>
+                      <span class="badge ms-auto {% if telegram_connected %}bg-success{% else %}bg-warning{% endif %}">
+                        {% if telegram_connected %}Connected{% else %}Not connected{% endif %}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto hashtags -->
+            <div class="mb-4">
+              <label class="platform-card" style="cursor:pointer;display:block;">
+                <div class="d-flex align-items-center gap-2">
+                  <input type="checkbox" class="form-check-input" name="auto_hashtags" checked>
+                  <i class="fa-solid fa-hashtag" style="color:var(--accent);"></i>
+                  <div>
+                    <span style="font-weight:600;font-size:.875rem;">Auto-generate hashtags</span>
+                    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem;">Adds relevant hashtags based on your prompt and caption</div>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <!-- AI Tools: Sentiment Analysis + Best Time Predictor -->
+            <div class="row g-3 mb-4">
+
+              <!-- Sentiment Analysis -->
+              <div class="col-lg-6">
+                <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem;background:var(--bg-secondary);">
+                  <div style="font-size:.8rem;font-weight:700;color:var(--text-primary);margin-bottom:.65rem;">
+                    <i class="fa-solid fa-brain me-1" style="color:#7c5cfc;"></i> Caption Sentiment
+                    <span style="font-size:.68rem;color:var(--text-muted);font-weight:400;margin-left:.35rem;">DistilBERT NLP</span>
+                  </div>
+                  <button type="button" onclick="runSentimentAnalysis()"
+                    id="sentimentBtn"
+                    style="display:inline-flex;align-items:center;gap:.4rem;padding:.38rem .85rem;border-radius:50px;border:1.5px solid #7c5cfc;background:rgba(124,92,252,.07);color:#7c5cfc;font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;">
+                    <i class="fa-solid fa-magnifying-glass-chart" id="sentimentIcon"></i>
+                    <span id="sentimentBtnLabel">Analyse</span>
+                  </button>
+                  <div id="sentimentResult" style="display:none;margin-top:.75rem;">
+                    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;">
+                      <span id="sentimentEmoji" style="font-size:1.5rem;"></span>
+                      <div>
+                        <div id="sentimentLabel" style="font-size:.875rem;font-weight:800;"></div>
+                        <div id="sentimentScore" style="font-size:.72rem;color:var(--text-muted);"></div>
+                      </div>
+                    </div>
+                    <div style="margin-bottom:.35rem;">
+                      <div style="display:flex;justify-content:space-between;font-size:.72rem;font-weight:600;margin-bottom:.2rem;">
+                        <span style="color:#16a34a;">😊 Positive</span><span id="posScore"></span>
+                      </div>
+                      <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                        <div id="posBar" style="height:100%;background:#16a34a;border-radius:3px;transition:width .6s;width:0%;"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div style="display:flex;justify-content:space-between;font-size:.72rem;font-weight:600;margin-bottom:.2rem;">
+                        <span style="color:#dc2626;">😟 Negative</span><span id="negScore"></span>
+                      </div>
+                      <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                        <div id="negBar" style="height:100%;background:#dc2626;border-radius:3px;transition:width .6s;width:0%;"></div>
+                      </div>
+                    </div>
+                    <div id="sentimentWarning" style="display:none;margin-top:.6rem;padding:.5rem .75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;font-size:.75rem;color:#dc2626;">
+                      <i class="fa-solid fa-triangle-exclamation me-1"></i><span id="sentimentWarningText"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Best Time Predictor -->
+              <div class="col-lg-6">
+                <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem;background:var(--bg-secondary);">
+                  <div style="font-size:.8rem;font-weight:700;color:var(--text-primary);margin-bottom:.65rem;">
+                    <i class="fa-solid fa-clock me-1" style="color:#d97706;"></i> Best Time to Post
+                    <span style="font-size:.68rem;color:var(--text-muted);font-weight:400;margin-left:.35rem;">RandomForest ML</span>
+                  </div>
+                  <button type="button" onclick="runBestTimePrediction()"
+                    id="bestTimeBtn"
+                    style="display:inline-flex;align-items:center;gap:.4rem;padding:.38rem .85rem;border-radius:50px;border:1.5px solid #d97706;background:rgba(217,119,6,.07);color:#d97706;font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;">
+                    <i class="fa-solid fa-wand-magic-sparkles" id="bestTimeIcon"></i>
+                    <span id="bestTimeBtnLabel">Predict</span>
+                  </button>
+                  <div id="bestTimeResult" style="display:none;margin-top:.75rem;">
+                    <div style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;">
+                      Click a slot to auto-schedule ↓
+                    </div>
+                    <div id="bestTimeSlots"></div>
+                    <div id="bestTimeModelInfo" style="font-size:.68rem;color:var(--text-muted);margin-top:.4rem;"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Schedule -->
+            <div class="mb-4">
+              <label class="form-label">Schedule <span style="color:var(--text-muted);font-weight:400;">(optional — leave blank to post now)</span></label>
+              <div class="row g-2">
+                <div class="col-6">
+                  <input type="date" class="form-control" name="schedule_date" id="ai_schedule_date">
+                  <div class="form-text">Date</div>
+                </div>
+                <div class="col-6">
+                  <input type="time" class="form-control" name="schedule_time" id="ai_schedule_time">
+                  <div class="form-text">Time</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+              <button type="submit" class="btn btn-primary" id="aiSubmitBtn">
+                <i class="fa-solid fa-eye me-1"></i> <span id="aiSubmitLabel">Generate &amp; Preview</span>
+              </button>
+              <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="card mt-3" style="background:rgba(124,92,252,.04);border-color:rgba(124,92,252,.15);">
+        <div class="card-body p-4">
+          <h6 style="font-weight:700;color:var(--accent);margin-bottom:.75rem;">
+            <i class="fa-solid fa-lightbulb me-2"></i>Tips for great prompts
+          </h6>
+          <ul style="margin:0;font-size:.875rem;">
+            <li>Specify an art style — <em>"photorealistic"</em>, <em>"oil painting"</em>, <em>"digital art"</em></li>
+            <li>Describe colors, lighting, and composition</li>
+            <li>Include mood — <em>"moody"</em>, <em>"vibrant"</em>, <em>"minimalist"</em></li>
+            <li>Example: <code>"A serene sunset over a calm lake, digital art, vibrant colors"</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         MODE B — Upload & Edit
+    ══════════════════════════════════════════════════════ -->
+    <div id="panel-upload" class="mode-panel">
+
+      <!-- Image Editor card -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <i class="fa-solid fa-sliders me-2" style="color:var(--accent);"></i>Image Editor
+        </div>
+        <div class="card-body p-4">
+
+          <!-- Drop zone -->
+          <div id="dropZone" class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <i class="fa-solid fa-cloud-arrow-up" style="font-size:2.5rem;color:var(--text-muted);margin-bottom:.75rem;display:block;opacity:.45;"></i>
+            <p style="color:var(--text-secondary);font-size:.95rem;font-weight:600;margin:0;">Click to browse or drag &amp; drop</p>
+            <p style="color:var(--text-muted);font-size:.78rem;margin:.35rem 0 0;">JPG, PNG, GIF, WebP — max 16 MB</p>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+
+          <!-- Editor (hidden until image picked) -->
+          <div id="editorSection" style="display:none;">
+            <div class="editor-wrap">
+
+              <!-- Canvas -->
+              <div class="editor-canvas-col">
+                <div class="canvas-wrap">
+                  <canvas id="mainCanvas"></canvas>
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                  <button type="button" class="btn btn-secondary btn-sm w-100" onclick="resetAll()">
+                    <i class="fa-solid fa-rotate-left me-1"></i> Reset
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('fileInput').click()" title="Change image">
+                    <i class="fa-solid fa-image"></i>
+                  </button>
+                </div>
+                <!-- Photo strip for multiple images -->
+                <div id="photoStrip" style="display:none;margin-top:.75rem;">
+                  <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Photos</div>
+                  <div id="photoStripInner" style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.4rem;align-items:center;scrollbar-width:thin;"></div>
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div class="editor-controls-col">
+                <div class="editor-tabs">
+                  <button class="editor-tab active" onclick="switchEditorTab('filters', this)">
+                    <i class="fa-solid fa-palette me-1"></i>Filters
+                  </button>
+                  <button class="editor-tab" onclick="switchEditorTab('adjust', this)">
+                    <i class="fa-solid fa-sliders me-1"></i>Adjust
+                  </button>
+                </div>
+
+                <!-- Filters tab -->
+                <div id="tab-filters" class="tab-panel active">
+                  <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;">Tap a filter to apply it.</p>
+                  <div class="filter-strip" id="filterStrip"></div>
+                </div>
+
+                <!-- Adjust tab -->
+                <div id="tab-adjust" class="tab-panel">
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-sun"></i></div>
+                    <div class="adj-label">Brightness</div>
+                    <input type="range" class="adj-slider" id="sl-brightness" min="-100" max="100" value="0" oninput="updateAdj(this,'brightness')">
+                    <div class="adj-value" id="val-brightness">0</div>
+                  </div>
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-circle-half-stroke"></i></div>
+                    <div class="adj-label">Contrast</div>
+                    <input type="range" class="adj-slider" id="sl-contrast" min="-100" max="100" value="0" oninput="updateAdj(this,'contrast')">
+                    <div class="adj-value" id="val-contrast">0</div>
+                  </div>
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-droplet"></i></div>
+                    <div class="adj-label">Saturation</div>
+                    <input type="range" class="adj-slider" id="sl-saturation" min="-100" max="100" value="0" oninput="updateAdj(this,'saturation')">
+                    <div class="adj-value" id="val-saturation">0</div>
+                  </div>
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-temperature-half"></i></div>
+                    <div class="adj-label">Warmth</div>
+                    <input type="range" class="adj-slider" id="sl-warmth" min="-100" max="100" value="0" oninput="updateAdj(this,'warmth')">
+                    <div class="adj-value" id="val-warmth">0</div>
+                  </div>
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-eye"></i></div>
+                    <div class="adj-label">Vignette</div>
+                    <input type="range" class="adj-slider" id="sl-vignette" min="0" max="100" value="0" oninput="updateAdj(this,'vignette')">
+                    <div class="adj-value" id="val-vignette">0</div>
+                  </div>
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                    <div class="adj-label">Sharpen</div>
+                    <input type="range" class="adj-slider" id="sl-sharpen" min="0" max="100" value="0" oninput="updateAdj(this,'sharpen')">
+                    <div class="adj-value" id="val-sharpen">0</div>
+                  </div>
+                  <div class="adj-row">
+                    <div class="adj-icon"><i class="fa-solid fa-cloud"></i></div>
+                    <div class="adj-label">Fade</div>
+                    <input type="range" class="adj-slider" id="sl-fade" min="0" max="100" value="0" oninput="updateAdj(this,'fade')">
+                    <div class="adj-value" id="val-fade">0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Post Settings card -->
+      <div class="card">
+        <div class="card-header">
+          <i class="fa-solid fa-paper-plane me-2" style="color:var(--accent);"></i>Post Settings
+        </div>
+        <div class="card-body p-4">
+          <form method="POST" action="{{ url_for('upload_image') }}" id="postForm" enctype="multipart/form-data">
+            <input type="hidden" id="editedImageData" name="edited_image_data" value="">
+            <input type="hidden" id="multiImageData" name="multi_image_data" value="">
+            <input type="file" id="hiddenFile" name="image" style="display:none;" accept="image/*">
+
+            <div class="mb-4">
+              <label for="up-caption" class="form-label">
+                Caption
+                <span style="color:var(--text-muted);font-weight:400;">(optional)</span>
+              </label>
+              <textarea class="form-control" id="up-caption" name="caption" rows="3"
+                        placeholder="Write a caption, or use AI to generate one below…"></textarea>
+
+              <!-- ── AI Caption Generator ── -->
+              <div style="margin-top:.75rem;">
+                <button type="button" id="genCaptionBtnUp" onclick="openCaptionModal('upload')"
+                  style="display:inline-flex;align-items:center;gap:.5rem;padding:.45rem .9rem;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:rgba(124,92,252,.07);color:var(--accent);font-size:.8rem;font-weight:700;cursor:pointer;transition:var(--transition);"
+                  onmouseover="this.style.background='rgba(124,92,252,.15)'"
+                  onmouseout="this.style.background='rgba(124,92,252,.07)'">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  Generate AI Captions
+                </button>
+                <span style="font-size:.75rem;color:var(--text-muted);margin-left:.5rem;">
+                  Powered by Gemini Vision
+                </span>
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <label class="platform-card" style="cursor:pointer;display:block;">
+                <div class="d-flex align-items-center gap-2">
+                  <input type="checkbox" class="form-check-input" name="auto_hashtags" checked>
+                  <i class="fa-solid fa-hashtag" style="color:var(--accent);"></i>
+                  <div>
+                    <span style="font-weight:600;font-size:.875rem;">Auto-generate hashtags</span>
+                    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem;">Adds relevant hashtags based on your caption</div>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label">Post to <span style="color:var(--danger);">*</span></label>
+              <div class="row g-2 mt-1">
+                <div class="col-6">
+                  <label class="platform-card" style="cursor:pointer;display:block;">
+                    <div class="d-flex align-items-center gap-2">
+                      <input type="checkbox" class="form-check-input" name="platforms" value="instagram"
+                             {% if ig_connected %}checked{% else %}disabled{% endif %}>
+                      <i class="fa-brands fa-instagram" style="font-size:1.1rem;color:#e1306c;"></i>
+                      <span style="font-weight:600;font-size:.875rem;">Instagram</span>
+                      <span class="badge ms-auto {% if ig_connected %}bg-success{% else %}bg-warning{% endif %}">
+                        {% if ig_connected %}Connected{% else %}Not connected{% endif %}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+                <div class="col-6">
+                  <label class="platform-card" style="cursor:pointer;display:block;">
+                    <div class="d-flex align-items-center gap-2">
+                      <input type="checkbox" class="form-check-input" name="platforms" value="telegram"
+                             {% if telegram_connected %}checked{% else %}disabled{% endif %}>
+                      <i class="fa-brands fa-telegram" style="font-size:1.1rem;color:#229ed9;"></i>
+                      <span style="font-weight:600;font-size:.875rem;">Telegram</span>
+                      <span class="badge ms-auto {% if telegram_connected %}bg-success{% else %}bg-warning{% endif %}">
+                        {% if telegram_connected %}Connected{% else %}Not connected{% endif %}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label">Schedule <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+              <div class="row g-2">
+                <div class="col-6">
+                  <input type="date" class="form-control" name="schedule_date" id="up_schedule_date">
+                  <div class="form-text">Date</div>
+                </div>
+                <div class="col-6">
+                  <input type="time" class="form-control" name="schedule_time" id="up_schedule_time">
+                  <div class="form-text">Time</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+              <button type="submit" class="btn btn-primary" id="submitBtn">
+                <i class="fa-solid fa-eye me-1"></i> Preview &amp; Post
+              </button>
+              <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div><!-- /panel-upload -->
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Mode switcher ────────────────────────────────────────────
+function switchMode(mode) {
+  ['ai','upload'].forEach(m => {
+    document.getElementById('tab-' + m).classList.toggle('active', m === mode);
+    document.getElementById('panel-' + m).classList.toggle('active', m === mode);
+  });
+}
+
+// ── Multi-image state ────────────────────────────────────────
+let images = [];        // array of { file, srcImage, adj, activeFilter, dataURL }
+let activeIdx = 0;
+
+// ── Editor state (mirrors active image) ─────────────────────
+let srcImage = null;
+let adj = { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 };
+let activeFilter = 'Normal';
+
+const FILTERS = [
+  { name:'Normal',    css:'' },
+  { name:'Clarendon', css:'contrast(1.2) saturate(1.35)' },
+  { name:'Gingham',   css:'brightness(1.05) hue-rotate(-10deg) saturate(0.9)' },
+  { name:'Moon',      css:'grayscale(1) brightness(1.1) contrast(1.1)' },
+  { name:'Lark',      css:'brightness(1.1) contrast(0.9) saturate(1.1) sepia(0.1)' },
+  { name:'Reyes',     css:'sepia(0.22) brightness(1.1) contrast(0.85) saturate(0.75)' },
+  { name:'Juno',      css:'saturate(1.4) contrast(1.1) brightness(1.05)' },
+  { name:'Slumber',   css:'saturate(0.66) brightness(1.05) sepia(0.15)' },
+  { name:'Crema',     css:'sepia(0.15) contrast(0.9) brightness(1.05) saturate(0.75)' },
+  { name:'Ludwig',    css:'brightness(1.05) contrast(1.05) saturate(0.8) sepia(0.1)' },
+  { name:'Aden',      css:'hue-rotate(-20deg) saturate(0.85) brightness(1.1) contrast(0.9)' },
+  { name:'Perpetua',  css:'contrast(1.1) saturate(1.1) brightness(1.05) sepia(0.05)' },
+  { name:'Cinematic', css:'contrast(1.3) saturate(0.8) brightness(0.95) sepia(0.15)' },
+  { name:'Fade',      css:'brightness(1.1) contrast(0.85) saturate(0.7) sepia(0.1)' },
+  { name:'Chrome',    css:'saturate(0) contrast(1.2) brightness(1.1)' },
+];
+
+// ── File input ───────────────────────────────────────────────
+const fileInput  = document.getElementById('fileInput');
+const hiddenFile = document.getElementById('hiddenFile');
+const dropZone   = document.getElementById('dropZone');
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) {
+    addFiles(Array.from(fileInput.files));
+  }
+});
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.style.borderColor='var(--accent)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor='var(--border)'; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.style.borderColor='var(--border)';
+  if (e.dataTransfer.files.length > 0) addFiles(Array.from(e.dataTransfer.files));
+});
+
+function addFiles(files) {
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        images.push({
+          file: file,
+          srcImage: img,
+          adj: { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 },
+          activeFilter: 'Normal',
+          dataURL: null
+        });
+        loaded++;
+        if (loaded === files.length) {
+          // Show editor with first new image active
+          activeIdx = images.length - files.length;
+          dropZone.style.display = 'none';
+          document.getElementById('editorSection').style.display = 'block';
+          loadActiveImage();
+          updatePhotoStrip();
+          // Sync hiddenFile with first file for single-image fallback
+          const dt = new DataTransfer();
+          dt.items.add(images[0].file);
+          hiddenFile.files = dt.files;
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadActiveImage() {
+  const entry = images[activeIdx];
+  srcImage = entry.srcImage;
+  adj = Object.assign({}, entry.adj);
+  activeFilter = entry.activeFilter;
+  // Sync sliders
+  ['brightness','contrast','saturation','warmth','vignette','sharpen','fade'].forEach(k => {
+    document.getElementById('sl-' + k).value = adj[k];
+    document.getElementById('val-' + k).textContent = adj[k];
+  });
+  buildFilterStrip();
+  render();
+}
+
+function saveActiveState() {
+  if (images.length === 0) return;
+  const entry = images[activeIdx];
+  entry.adj = Object.assign({}, adj);
+  entry.activeFilter = activeFilter;
+  // Bake canvas to dataURL
+  entry.dataURL = document.getElementById('mainCanvas').toDataURL('image/jpeg', 0.95);
+}
+
+function switchActiveImage(idx) {
+  saveActiveState();
+  activeIdx = idx;
+  loadActiveImage();
+  updatePhotoStrip();
+}
+
+function updatePhotoStrip() {
+  const strip = document.getElementById('photoStrip');
+  const inner = document.getElementById('photoStripInner');
+  if (images.length <= 1) {
+    strip.style.display = 'none';
+    return;
+  }
+  strip.style.display = 'block';
+  inner.innerHTML = '';
+  images.forEach((entry, i) => {
+    const thumb = document.createElement('div');
+    thumb.style.cssText = `flex-shrink:0;width:52px;height:52px;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid ${i === activeIdx ? 'var(--accent)' : 'transparent'};transition:var(--transition);`;
+    const img = document.createElement('img');
+    img.src = entry.srcImage.src;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    thumb.appendChild(img);
+    thumb.addEventListener('click', () => switchActiveImage(i));
+    inner.appendChild(thumb);
+  });
+  // Add more button
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.title = 'Add more images';
+  addBtn.style.cssText = 'flex-shrink:0;width:52px;height:52px;border-radius:8px;border:1.5px dashed var(--border);background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:var(--transition);';
+  addBtn.innerHTML = '<i class="fa-solid fa-plus" style="color:var(--text-muted);font-size:.9rem;"></i>';
+  addBtn.addEventListener('click', () => fileInput.click());
+  inner.appendChild(addBtn);
+}
+
+// ── Editor tabs ──────────────────────────────────────────────
+function switchEditorTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.editor-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Adjustments ──────────────────────────────────────────────
+function updateAdj(slider, key) {
+  adj[key] = parseInt(slider.value);
+  document.getElementById('val-' + key).textContent = slider.value;
+  render();
+}
+
+function resetAll() {
+  adj = { brightness:0, contrast:0, saturation:0, warmth:0, vignette:0, sharpen:0, fade:0 };
+  ['brightness','contrast','saturation','warmth','vignette','sharpen','fade'].forEach(k => {
+    document.getElementById('sl-' + k).value = 0;
+    document.getElementById('val-' + k).textContent = '0';
+  });
+  activeFilter = 'Normal';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'Normal'));
+  render();
+}
+
+// ── Filter strip ─────────────────────────────────────────────
+function buildFilterStrip() {
+  const strip = document.getElementById('filterStrip');
+  strip.innerHTML = '';
+  FILTERS.forEach(f => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-btn' + (f.name === activeFilter ? ' active' : '');
+    btn.dataset.filter = f.name;
+    const thumb = document.createElement('div');
+    thumb.className = 'filter-thumb';
+    const c = document.createElement('canvas');
+    c.width = 58; c.height = 58;
+    const ctx = c.getContext('2d');
+    ctx.filter = f.css || 'none';
+    ctx.drawImage(srcImage, 0, 0, 58, 58);
+    thumb.appendChild(c);
+    const label = document.createElement('span');
+    label.className = 'filter-label';
+    label.textContent = f.name;
+    btn.appendChild(thumb);
+    btn.appendChild(label);
+    btn.addEventListener('click', () => {
+      activeFilter = f.name;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+    strip.appendChild(btn);
+  });
+}
+
+// ── Main render ──────────────────────────────────────────────
+function render() {
+  if (!srcImage) return;
+  const canvas = document.getElementById('mainCanvas');
+  const size = 1080;
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const filterDef = FILTERS.find(f => f.name === activeFilter);
+  ctx.filter = filterDef?.css || 'none';
+  ctx.drawImage(srcImage, 0, 0, size, size);
+  ctx.filter = 'none';
+  let id = ctx.getImageData(0, 0, size, size);
+  let d  = id.data;
+  const br = adj.brightness / 100;
+  const co = adj.contrast   / 100;
+  const sa = adj.saturation / 100;
+  const wa = adj.warmth     / 100;
+  const fa = adj.fade       / 100;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+    r += br*255; g += br*255; b += br*255;
+    const cf = co + 1;
+    r = (r-128)*cf+128; g = (g-128)*cf+128; b = (b-128)*cf+128;
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    r = lum+(r-lum)*(1+sa); g = lum+(g-lum)*(1+sa); b = lum+(b-lum)*(1+sa);
+    r += wa*30; b -= wa*30;
+    r = r+fa*(128-r)*0.5; g = g+fa*(128-g)*0.5; b = b+fa*(128-b)*0.5;
+    d[i]=Math.min(255,Math.max(0,r)); d[i+1]=Math.min(255,Math.max(0,g)); d[i+2]=Math.min(255,Math.max(0,b));
+  }
+  ctx.putImageData(id, 0, 0);
+  if (adj.sharpen > 0) {
+    const sh = adj.sharpen/100;
+    const tmp = document.createElement('canvas'); tmp.width=size; tmp.height=size;
+    const tc = tmp.getContext('2d');
+    tc.filter = `blur(${1+sh}px)`; tc.drawImage(canvas,0,0); tc.filter='none';
+    const blurred = tc.getImageData(0,0,size,size).data;
+    const sharp = ctx.getImageData(0,0,size,size); const sd=sharp.data; const amt=sh*1.5;
+    for(let i=0;i<sd.length;i+=4){
+      sd[i]=Math.min(255,Math.max(0,sd[i]+(sd[i]-blurred[i])*amt));
+      sd[i+1]=Math.min(255,Math.max(0,sd[i+1]+(sd[i+1]-blurred[i+1])*amt));
+      sd[i+2]=Math.min(255,Math.max(0,sd[i+2]+(sd[i+2]-blurred[i+2])*amt));
+    }
+    ctx.putImageData(sharp,0,0);
+  }
+  if (adj.vignette > 0) {
+    const v = adj.vignette/100;
+    const grad = ctx.createRadialGradient(size/2,size/2,size*0.35,size/2,size/2,size*0.75);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(1,`rgba(0,0,0,${v*0.75})`);
+    ctx.fillStyle=grad; ctx.fillRect(0,0,size,size);
+  }
+}
+
+// ── Form submit ──────────────────────────────────────────────
+document.getElementById('postForm').addEventListener('submit', function(e) {
+  if (images.length === 0) {
+    e.preventDefault();
+    alert('Please select an image first.');
+    return;
+  }
+  // Save current image state
+  saveActiveState();
+
+  if (images.length > 1) {
+    // Multi-image: serialize all as JSON array
+    const allData = images.map(entry => entry.dataURL || entry.srcImage.src);
+    document.getElementById('multiImageData').value = JSON.stringify(allData);
+    document.getElementById('editedImageData').value = '';
+  } else {
+    // Single image: use existing edited_image_data path
+    document.getElementById('editedImageData').value = images[0].dataURL || document.getElementById('mainCanvas').toDataURL('image/jpeg', 0.95);
+    document.getElementById('multiImageData').value = '';
+  }
+});
+
+// ── Disable + button when prompt has text ───────────────────
+document.getElementById('prompt').addEventListener('input', function() {
+  const hasText = this.value.trim().length > 0;
+  const btn = document.getElementById('attachBtn');
+  btn.disabled = hasText;
+  btn.style.opacity = hasText ? '0.35' : '';
+  btn.style.cursor = hasText ? 'not-allowed' : 'pointer';
+});
+
+// ── AI attachment ────────────────────────────────────────────
+document.getElementById('aiFileInput').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    // Show thumbnail
+    document.getElementById('aiThumb').src = e.target.result;
+    document.getElementById('aiImagePreview').style.display = 'flex';
+    document.getElementById('attachedImageData').value = e.target.result;
+
+    // Disable and clear the prompt — not needed when uploading own image
+    const promptEl = document.getElementById('prompt');
+    promptEl.value = '';
+    promptEl.disabled = true;
+    promptEl.removeAttribute('required');
+    promptEl.style.opacity = '0.4';
+    promptEl.style.cursor = 'not-allowed';
+    document.getElementById('promptRequired').style.display = 'none';
+
+    // Change form action to upload route so it skips AI generation
+    document.getElementById('aiForm').action = "{{ url_for('upload_image') }}";
+
+    // Update button label
+    document.getElementById('aiSubmitLabel').textContent = 'Preview & Post';
+  };
+  reader.readAsDataURL(file);
+});
+
+function removeAiImage() {
+  document.getElementById('aiFileInput').value = '';
+  document.getElementById('aiImagePreview').style.display = 'none';
+  document.getElementById('attachedImageData').value = '';
+
+  // Re-enable prompt
+  const promptEl = document.getElementById('prompt');
+  promptEl.disabled = false;
+  promptEl.setAttribute('required', 'required');
+  promptEl.style.opacity = '';
+  promptEl.style.cursor = '';
+  document.getElementById('promptRequired').style.display = '';
+
+  // Restore form action to AI generate route
+  document.getElementById('aiForm').action = "{{ url_for('generate_image') }}";
+
+  // Restore button label
+  document.getElementById('aiSubmitLabel').textContent = 'Generate & Preview';
+}
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     AI CAPTION GENERATOR MODAL
+══════════════════════════════════════════════════════════ -->
+<style>
+/* ── Light modal overlay ── */
+.cm-overlay {
+  display:none; position:fixed; inset:0; z-index:9999;
+  background:rgba(15,15,35,.55); backdrop-filter:blur(6px);
+  overflow-y:auto; padding:2rem 1rem;
+  align-items:flex-start; justify-content:center;
+}
+.cm-overlay.open { display:flex; }
+
+/* ── Modal box — always white/light ── */
+.cm-box {
+  background:#ffffff; color:#1e1e2e;
+  border-radius:18px; width:100%; max-width:660px;
+  box-shadow:0 32px 80px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.08);
+  overflow:hidden; animation:cmSlideIn .22s ease;
+}
+@keyframes cmSlideIn {
+  from { opacity:0; transform:translateY(-18px) scale(.97); }
+  to   { opacity:1; transform:translateY(0)     scale(1);   }
+}
+
+/* Header */
+.cm-header {
+  padding:1.25rem 1.5rem 1.1rem;
+  border-bottom:1.5px solid #f0f0f5;
+  display:flex; align-items:center; justify-content:space-between;
+  background:linear-gradient(135deg,#f8f6ff 0%,#fff 100%);
+}
+.cm-title { font-size:1.05rem; font-weight:800; color:#1e1e2e; margin:0; }
+.cm-subtitle { font-size:.78rem; color:#6b7280; margin:.2rem 0 0; }
+.cm-close {
+  width:32px; height:32px; border-radius:50%; border:none;
+  background:#f3f4f6; color:#6b7280; font-size:.9rem;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:background .15s, color .15s; flex-shrink:0;
+}
+.cm-close:hover { background:#e5e7eb; color:#1e1e2e; }
+
+/* Style chips section */
+.cm-section { padding:1.1rem 1.5rem; border-bottom:1.5px solid #f0f0f5; }
+.cm-section-label { font-size:.78rem; font-weight:700; color:#374151; margin-bottom:.65rem; text-transform:uppercase; letter-spacing:.04em; }
+.cm-chips { display:flex; flex-wrap:wrap; gap:.45rem; }
+
+.cm-chip {
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.38rem .85rem; border-radius:50px;
+  border:1.5px solid #e5e7eb; background:#f9fafb;
+  color:#374151; font-size:.8rem; font-weight:600;
+  cursor:pointer; user-select:none; transition:all .15s;
+}
+.cm-chip:hover { border-color:#c4b5fd; background:#faf5ff; }
+.cm-chip.selected { border-color:#7c5cfc; background:#f3f0ff; color:#5b21b6; }
+.cm-chip input { display:none; }
+
+/* Action bar */
+.cm-action { padding:.9rem 1.5rem; border-bottom:1.5px solid #f0f0f5; display:flex; align-items:center; gap:1rem; background:#fafafa; }
+.cm-gen-btn {
+  display:inline-flex; align-items:center; gap:.55rem;
+  padding:.6rem 1.4rem; border-radius:50px; border:none;
+  background:linear-gradient(135deg,#7c5cfc,#a78bfa);
+  color:#fff; font-size:.875rem; font-weight:700;
+  cursor:pointer; transition:opacity .15s, transform .1s;
+  box-shadow:0 4px 14px rgba(124,92,252,.35);
+}
+.cm-gen-btn:hover:not(:disabled) { opacity:.9; transform:translateY(-1px); }
+.cm-gen-btn:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+.cm-status { font-size:.78rem; color:#6b7280; }
+
+/* Results */
+.cm-results { padding:1.25rem 1.5rem; max-height:380px; overflow-y:auto; }
+.cm-placeholder {
+  text-align:center; padding:2.5rem 1rem; color:#9ca3af;
+}
+.cm-placeholder i { font-size:2.2rem; opacity:.35; display:block; margin-bottom:.75rem; }
+
+/* Caption cards */
+.cm-card {
+  border:1.5px solid #e5e7eb; border-radius:12px;
+  padding:1rem 1.1rem; margin-bottom:.75rem;
+  background:#fff; transition:border-color .15s, box-shadow .15s;
+  cursor:default;
+}
+.cm-card:hover { border-color:#c4b5fd; box-shadow:0 2px 12px rgba(124,92,252,.1); }
+.cm-card.cm-selected { border-color:#7c5cfc; box-shadow:0 2px 16px rgba(124,92,252,.18); background:#faf8ff; }
+.cm-card-header { display:flex; align-items:center; gap:.5rem; margin-bottom:.55rem; }
+.cm-card-badge {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.2rem .65rem; border-radius:50px;
+  font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+}
+.cm-card-desc { font-size:.72rem; color:#9ca3af; margin-left:auto; }
+.cm-card-text { font-size:.875rem; color:#1f2937; line-height:1.65; }
+.cm-card-actions { display:flex; gap:.5rem; margin-top:.7rem; flex-wrap:wrap; }
+.cm-use-btn {
+  padding:.32rem .85rem; border-radius:50px;
+  border:1.5px solid #7c5cfc; background:transparent; color:#7c5cfc;
+  font-size:.75rem; font-weight:700; cursor:pointer; transition:all .15s;
+}
+.cm-use-btn:hover { background:#7c5cfc; color:#fff; }
+.cm-copy-btn {
+  padding:.32rem .85rem; border-radius:50px;
+  border:1.5px solid #e5e7eb; background:transparent; color:#6b7280;
+  font-size:.75rem; font-weight:700; cursor:pointer; transition:all .15s;
+}
+.cm-copy-btn:hover { border-color:#9ca3af; color:#374151; }
+
+/* Gemini sees bar */
+.cm-desc-bar {
+  display:none; padding:.7rem 1.5rem;
+  border-top:1.5px solid #f0f0f5; background:#f8f6ff;
+  font-size:.78rem; color:#5b21b6;
+}
+
+/* Footer */
+.cm-footer {
+  padding:.9rem 1.5rem; border-top:1.5px solid #f0f0f5;
+  display:flex; justify-content:flex-end; background:#fafafa;
+}
+.cm-close-btn {
+  padding:.48rem 1.2rem; border-radius:50px;
+  border:1.5px solid #e5e7eb; background:#fff; color:#374151;
+  font-size:.875rem; font-weight:600; cursor:pointer; transition:all .15s;
+}
+.cm-close-btn:hover { background:#f3f4f6; border-color:#d1d5db; }
+</style>
+
+<div id="captionModal" class="cm-overlay">
+  <div class="cm-box">
+
+    <!-- Header -->
+    <div class="cm-header">
+      <div>
+        <p class="cm-title">
+          <i class="fa-solid fa-wand-magic-sparkles me-2" style="color:#7c5cfc;"></i>AI Caption Generator
+        </p>
+        <p class="cm-subtitle">Gemini Vision analyses your image and writes captions in 5 styles</p>
+      </div>
+      <button class="cm-close" onclick="closeCaptionModal()">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- Style chips -->
+    <div class="cm-section">
+      <div class="cm-section-label">Select styles to generate</div>
+      <div class="cm-chips" id="styleCheckboxes">
+        <label class="cm-chip selected" data-style="engaging">
+          <input type="checkbox" value="engaging" checked>
+          <i class="fa-solid fa-fire" style="color:#f97316;"></i> Engaging
+        </label>
+        <label class="cm-chip selected" data-style="professional">
+          <input type="checkbox" value="professional" checked>
+          <i class="fa-solid fa-briefcase" style="color:#0284c7;"></i> Professional
+        </label>
+        <label class="cm-chip selected" data-style="storytelling">
+          <input type="checkbox" value="storytelling" checked>
+          <i class="fa-solid fa-book-open" style="color:#7c5cfc;"></i> Storytelling
+        </label>
+        <label class="cm-chip selected" data-style="minimal">
+          <input type="checkbox" value="minimal" checked>
+          <i class="fa-solid fa-minus" style="color:#64748b;"></i> Minimal
+        </label>
+        <label class="cm-chip selected" data-style="funny">
+          <input type="checkbox" value="funny" checked>
+          <i class="fa-solid fa-face-laugh" style="color:#eab308;"></i> Funny / Witty
+        </label>
+      </div>
+    </div>
+
+    <!-- Action bar -->
+    <div class="cm-action">
+      <button type="button" id="runGenBtn" class="cm-gen-btn" onclick="runCaptionGeneration()">
+        <i class="fa-solid fa-sparkles" id="runGenIcon"></i>
+        <span id="runGenLabel">Generate Captions</span>
+      </button>
+      <span id="captionGenStatus" class="cm-status"></span>
+    </div>
+
+    <!-- Results -->
+    <div class="cm-results" id="captionResults">
+      <div id="captionPlaceholder" class="cm-placeholder">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        Click "Generate Captions" to analyse your image with AI
+      </div>
+      <div id="captionCards" style="display:none;"></div>
+    </div>
+
+    <!-- Gemini sees -->
+    <div id="imgDescSection" class="cm-desc-bar">
+      <i class="fa-solid fa-eye me-1"></i>
+      <strong>Gemini sees:</strong> <span id="imgDescText"></span>
+    </div>
+
+    <!-- Footer -->
+    <div class="cm-footer">
+      <button class="cm-close-btn" onclick="closeCaptionModal()">Close</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Voice Input (Web Speech API) ────────────────────────────
+let _recognition = null;
+let _isRecording = false;
+
+function initSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+
+  const rec = new SpeechRecognition();
+  rec.continuous      = false;   // stop after one sentence
+  rec.interimResults  = true;    // show live partial results
+  rec.lang            = 'en-US';
+  rec.maxAlternatives = 1;
+
+  const promptEl    = document.getElementById('prompt');
+  const statusEl    = document.getElementById('voiceStatus');
+  const statusText  = document.getElementById('voiceStatusText');
+  const micBtn      = document.getElementById('micBtn');
+  const micIcon     = document.getElementById('micIcon');
+
+  let _interim = '';
+
+  rec.onstart = () => {
+    _isRecording = true;
+    micBtn.classList.add('recording');
+    micIcon.className = 'fa-solid fa-stop';
+    statusEl.style.display = 'flex';
+    statusText.textContent = 'Listening… speak your prompt';
+  };
+
+  rec.onresult = (e) => {
+    let interim = '';
+    let final   = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    // Show live interim text in the textarea
+    const base = promptEl.dataset.baseText || '';
+    promptEl.value = base + (final || interim);
+    if (final) promptEl.dataset.baseText = base + final;
+    statusText.textContent = interim ? `Hearing: "${interim}"` : 'Processing…';
+  };
+
+  rec.onerror = (e) => {
+    const msgs = {
+      'not-allowed':  'Microphone access denied. Please allow mic in browser settings.',
+      'no-speech':    'No speech detected. Try again.',
+      'network':      'Network error during recognition.',
+      'aborted':      'Recording stopped.',
+    };
+    statusText.textContent = msgs[e.error] || `Error: ${e.error}`;
+    statusEl.style.background = 'rgba(220,38,38,.08)';
+    statusEl.style.borderColor = 'rgba(220,38,38,.3)';
+    document.getElementById('voiceStatusDot').style.background = '#dc2626';
+    setTimeout(resetMicUI, 2500);
+  };
+
+  rec.onend = () => {
+    _isRecording = false;
+    resetMicUI();
+    // Trigger prompt input event so the attach button logic updates
+    promptEl.dispatchEvent(new Event('input'));
+    delete promptEl.dataset.baseText;
+  };
+
+  return rec;
+}
+
+function resetMicUI() {
+  _isRecording = false;
+  const micBtn   = document.getElementById('micBtn');
+  const micIcon  = document.getElementById('micIcon');
+  const statusEl = document.getElementById('voiceStatus');
+  micBtn.classList.remove('recording');
+  micIcon.className = 'fa-solid fa-microphone';
+  setTimeout(() => {
+    statusEl.style.display = 'none';
+    statusEl.style.background = '';
+    statusEl.style.borderColor = '';
+    document.getElementById('voiceStatusDot').style.background = '#7c5cfc';
+  }, 1000);
+}
+
+function toggleVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('Voice input is not supported in this browser.\nPlease use Chrome or Edge.');
+    return;
+  }
+
+  if (_isRecording) {
+    // Stop recording
+    if (_recognition) _recognition.stop();
+    return;
+  }
+
+  // Start recording
+  _recognition = initSpeechRecognition();
+  if (!_recognition) return;
+
+  // Clear existing text before new recording (optional — comment out to append)
+  // document.getElementById('prompt').value = '';
+
+  try {
+    _recognition.start();
+  } catch(e) {
+    // Already started — ignore
+  }
+}
+
+// ── Sentiment Analysis ───────────────────────────────────────
+async function runSentimentAnalysis() {
+  const caption = (document.getElementById('ai-caption') || document.getElementById('up-caption')).value.trim();
+  if (!caption) { alert('Write a caption first, then analyse it.'); return; }
+
+  const btn = document.getElementById('sentimentBtn');
+  const icon = document.getElementById('sentimentIcon');
+  const lbl  = document.getElementById('sentimentBtnLabel');
+  btn.disabled = true;
+  icon.className = 'fa-solid fa-circle-notch spinning';
+  lbl.textContent = 'Analysing…';
+
+  try {
+    const resp = await fetch('/analyse-sentiment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caption })
+    });
+    const data = await resp.json();
+    if (!data.success) { alert('Error: ' + data.error); return; }
+
+    document.getElementById('sentimentEmoji').textContent = data.emoji;
+    document.getElementById('sentimentLabel').textContent = data.label;
+    document.getElementById('sentimentLabel').style.color = data.color;
+    document.getElementById('sentimentScore').textContent = `Confidence: ${(data.score*100).toFixed(1)}%`;
+
+    const pos = Math.round(data.breakdown.positive * 100);
+    const neg = Math.round(data.breakdown.negative * 100);
+    document.getElementById('posScore').textContent = pos + '%';
+    document.getElementById('negScore').textContent = neg + '%';
+    document.getElementById('posBar').style.width = pos + '%';
+    document.getElementById('negBar').style.width = neg + '%';
+
+    const warnEl = document.getElementById('sentimentWarning');
+    if (data.warning) {
+      document.getElementById('sentimentWarningText').textContent = data.warning;
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+    document.getElementById('sentimentResult').style.display = 'block';
+  } catch(e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    icon.className = 'fa-solid fa-magnifying-glass-chart';
+    lbl.textContent = 'Re-analyse';
+  }
+}
+
+// ── Best Time Predictor ──────────────────────────────────────
+async function runBestTimePrediction() {
+  const caption = (document.getElementById('ai-caption') || document.getElementById('up-caption')).value.trim();
+  const platform = document.querySelector('input[name="platforms"]:checked')?.value || 'instagram';
+
+  const btn  = document.getElementById('bestTimeBtn');
+  const icon = document.getElementById('bestTimeIcon');
+  const lbl  = document.getElementById('bestTimeBtnLabel');
+  btn.disabled = true;
+  icon.className = 'fa-solid fa-circle-notch spinning';
+  lbl.textContent = 'Predicting…';
+
+  try {
+    const resp = await fetch('/predict-best-time', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caption, platform })
+    });
+    const data = await resp.json();
+    if (!data.success) { alert('Error: ' + data.error); return; }
+
+    const container = document.getElementById('bestTimeSlots');
+    container.innerHTML = '';
+    const colors = ['#7c5cfc', '#d97706', '#0284c7'];
+
+    data.top_slots.forEach((slot, i) => {
+      const div = document.createElement('div');
+      div.style.cssText = `display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;
+        border-radius:9px;border:1.5px solid ${colors[i]}33;background:${colors[i]}0a;
+        margin-bottom:.4rem;cursor:pointer;transition:all .15s;`;
+      div.innerHTML = `
+        <span style="font-size:.9rem;">${i===0?'🥇':i===1?'🥈':'🥉'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:.8rem;color:${colors[i]};">${slot.label} · ${slot.day}</div>
+          <div style="font-size:.68rem;color:var(--text-muted);">${slot.reason}</div>
+        </div>
+        <div style="font-size:.75rem;font-weight:700;color:${colors[i]};flex-shrink:0;">${slot.confidence}%</div>
+        <i class="fa-solid fa-calendar-plus" style="color:${colors[i]};font-size:.75rem;flex-shrink:0;" title="Click to schedule at this time"></i>`;
+
+      // ── Click to auto-fill schedule fields ──
+      div.addEventListener('click', () => {
+        // Use exact date+time from server — no client-side recalculation
+        const dateStr = slot.date;                              // e.g. "2026-05-11"
+        const timeStr = String(slot.hour).padStart(2,'0') + ':00'; // e.g. "19:00"
+
+        const dateInputAI = document.getElementById('ai_schedule_date');
+        const timeInputAI = document.getElementById('ai_schedule_time');
+        const dateInputUp = document.getElementById('up_schedule_date');
+        const timeInputUp = document.getElementById('up_schedule_time');
+
+        if (dateInputAI) { dateInputAI.value = dateStr; timeInputAI.value = timeStr; }
+        if (dateInputUp) { dateInputUp.value = dateStr; timeInputUp.value = timeStr; }
+
+        // Flash fields purple
+        [dateInputAI, timeInputAI, dateInputUp, timeInputUp].forEach(el => {
+          if (!el) return;
+          el.style.transition = 'background .3s';
+          el.style.background = 'rgba(124,92,252,.18)';
+          setTimeout(() => { el.style.background = ''; }, 1200);
+        });
+
+        // Highlight selected slot
+        document.querySelectorAll('#bestTimeSlots > div').forEach(d => {
+          d.style.borderWidth = '1.5px';
+          d.style.boxShadow = 'none';
+        });
+        div.style.borderWidth = '2px';
+        div.style.boxShadow = `0 0 0 3px ${colors[i]}22`;
+      });
+
+      div.addEventListener('mouseenter', () => div.style.opacity = '.85');
+      div.addEventListener('mouseleave', () => div.style.opacity = '1');
+      container.appendChild(div);
+    });
+
+    document.getElementById('bestTimeModelInfo').textContent = '🤖 ' + data.model_info;
+    document.getElementById('bestTimeResult').style.display = 'block';
+  } catch(e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    icon.className = 'fa-solid fa-wand-magic-sparkles';
+    lbl.textContent = 'Re-predict';
+  }
+}
+
+// ── Caption Modal Logic ──────────────────────────────────────
+let _captionTargetMode = 'ai';   // 'ai' or 'upload'
+
+// Toggle style chips
+document.querySelectorAll('.cm-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const cb = chip.querySelector('input[type=checkbox]');
+    cb.checked = !cb.checked;
+    chip.classList.toggle('selected', cb.checked);
+  });
+});
+
+function openCaptionModal(mode) {
+  _captionTargetMode = mode || 'ai';
+  document.getElementById('captionModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeCaptionModal() {
+  document.getElementById('captionModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Close on backdrop click
+document.getElementById('captionModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCaptionModal();
+});
+
+async function runCaptionGeneration() {
+  // Collect selected styles
+  const styles = Array.from(document.querySelectorAll('#styleCheckboxes input:checked')).map(cb => cb.value);
+  if (styles.length === 0) {
+    alert('Please select at least one caption style.');
+    return;
+  }
+
+  // Get context
+  const userHint = _captionTargetMode === 'ai'
+    ? (document.getElementById('prompt').value || document.getElementById('ai-caption').value)
+    : document.getElementById('up-caption').value;
+
+  // Show loading state
+  const btn = document.getElementById('runGenBtn');
+  const icon = document.getElementById('runGenIcon');
+  const label = document.getElementById('runGenLabel');
+  const status = document.getElementById('captionGenStatus');
+  btn.disabled = true;
+  icon.className = 'fa-solid fa-circle-notch spinning';
+  label.textContent = 'Analysing image…';
+  status.textContent = 'This takes 3-8 seconds';
+  document.getElementById('captionPlaceholder').style.display = 'none';
+  document.getElementById('captionCards').style.display = 'none';
+  document.getElementById('imgDescSection').style.display = 'none';
+
+  try {
+    const payload = { user_hint: userHint, styles: styles };
+
+    if (_captionTargetMode === 'upload') {
+      // Upload mode — grab the current canvas image as base64 and send it
+      const canvas = document.getElementById('mainCanvas');
+      if (canvas && canvas.width > 0) {
+        payload.image_b64 = canvas.toDataURL('image/jpeg', 0.7);
+      }
+    } else {
+      // AI mode — use session image path if available
+      const imgPath = document.body.dataset.previewImage || '';
+      if (imgPath) payload.image_path = imgPath;
+    }
+
+    const resp = await fetch('/generate-captions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await resp.json();
+
+    if (!data.success) {
+      status.textContent = '❌ ' + (data.error || 'Generation failed');
+      btn.disabled = false;
+      icon.className = 'fa-solid fa-sparkles';
+      label.textContent = 'Try Again';
+      return;
+    }
+
+    // Render caption cards
+    renderCaptionCards(data.captions);
+
+    if (data.image_description) {
+      document.getElementById('imgDescText').textContent = data.image_description;
+      document.getElementById('imgDescSection').style.display = 'block';
+    }
+
+    status.textContent = `✅ ${Object.keys(data.captions).length} captions generated`;
+
+  } catch (err) {
+    status.textContent = '❌ Network error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    icon.className = 'fa-solid fa-sparkles';
+    label.textContent = 'Regenerate';
+  }
+}
+
+function renderCaptionCards(captions) {
+  const container = document.getElementById('captionCards');
+  container.innerHTML = '';
+
+  Object.entries(captions).forEach(([key, cap]) => {
+    const card = document.createElement('div');
+    card.className = 'cm-card';
+    card.innerHTML = `
+      <div class="cm-card-header">
+        <span class="cm-card-badge" style="background:${cap.color}18;color:${cap.color};">
+          <i class="fa-solid ${cap.icon}"></i>${cap.label}
+        </span>
+        <span class="cm-card-desc">${cap.description}</span>
+      </div>
+      <div class="cm-card-text">${escapeHtml(cap.text)}</div>
+      <div class="cm-card-actions">
+        <button class="cm-use-btn" onclick="useCaption('${key}', this)">
+          <i class="fa-solid fa-check me-1"></i>Use this caption
+        </button>
+        <button class="cm-copy-btn" onclick="copyCaption('${escapeAttr(cap.text)}', this)">
+          <i class="fa-solid fa-copy me-1"></i>Copy
+        </button>
+      </div>`;
+    card.dataset.captionText = cap.text;
+    container.appendChild(card);
+  });
+
+  container.style.display = 'block';
+}
+
+function useCaption(key, btn) {
+  const card = btn.closest('.cm-card');
+  const text = card.dataset.captionText;
+  const targetId = _captionTargetMode === 'ai' ? 'ai-caption' : 'up-caption';
+  document.getElementById(targetId).value = text;
+  document.querySelectorAll('.cm-card').forEach(c => c.classList.remove('cm-selected'));
+  card.classList.add('cm-selected');
+  setTimeout(closeCaptionModal, 400);
+}
+
+async function copyCaption(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Copied!';
+    btn.style.borderColor = '#16a34a';
+    btn.style.color = '#16a34a';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1500);
+  } catch(e) {
+    alert('Copy failed: ' + e.message);
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escapeAttr(str) {
+  return str.replace(/'/g, "\\'").replace(/\n/g, ' ');
+}
+</script>
+{% endblock %}

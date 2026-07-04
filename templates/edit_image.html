@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+{% block title %}Edit Image with AI{% endblock %}
+
+{% block head %}
+<style>
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 180px);
+    max-height: 700px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .chat-message {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .chat-message.user {
+    flex-direction: row-reverse;
+  }
+
+  .chat-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+  }
+
+  .chat-avatar.user {
+    background: var(--accent-gradient);
+    color: #fff;
+  }
+
+  .chat-avatar.ai {
+    background: rgba(124,92,252,0.1);
+    color: var(--accent);
+  }
+
+  .chat-bubble {
+    max-width: 70%;
+    padding: 0.85rem 1.1rem;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .chat-message.user .chat-bubble {
+    background: var(--accent-gradient);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+
+  .chat-message.ai .chat-bubble {
+    background: rgba(124,92,252,0.06);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+  }
+
+  .chat-bubble img {
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+    margin-top: 0.5rem;
+    display: block;
+  }
+
+  .chat-input-area {
+    border-top: 1px solid var(--border);
+    padding: 1rem 1.5rem;
+    background: rgba(124,92,252,0.02);
+  }
+
+  .chat-input-wrapper {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+  }
+
+  .chat-input-wrapper textarea {
+    flex: 1;
+    resize: none;
+    min-height: 44px;
+    max-height: 120px;
+    border-radius: var(--radius);
+  }
+
+  .chat-input-wrapper button {
+    flex-shrink: 0;
+  }
+
+  .image-preview-box {
+    background: rgba(124,92,252,0.04);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+
+  .image-preview-box img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-sm);
+  }
+
+  .loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .empty-state-chat {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+  }
+
+  .empty-state-chat i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+
+    <!-- Header -->
+    <div class="mb-4">
+      <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);font-size:.85rem;text-decoration:none;">
+        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+      </a>
+      <h2 style="font-weight:800;letter-spacing:-.5px;margin-top:.75rem;margin-bottom:.25rem;">
+        <i class="fa-solid fa-wand-sparkles me-2" style="color:var(--accent);"></i>Edit Image with AI
+      </h2>
+      <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">
+        Upload an image and describe how you want to change it — like ChatGPT for images.
+      </p>
+    </div>
+
+    <div class="row g-4">
+      <!-- Left: Upload & Current Image -->
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header">
+            <i class="fa-solid fa-image me-2" style="color:var(--accent);"></i>Current Image
+          </div>
+          <div class="card-body p-4">
+            
+            <!-- Upload form -->
+            <form id="uploadForm" enctype="multipart/form-data" style="margin-bottom:1.5rem;">
+              <label for="imageFile" class="form-label">Upload Image</label>
+              <div id="dropZone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:2rem 1rem;text-align:center;cursor:pointer;transition:var(--transition);"
+                   onclick="document.getElementById('imageFile').click()">
+                <i class="fa-solid fa-cloud-arrow-up" style="font-size:2rem;color:var(--text-muted);margin-bottom:.5rem;display:block;"></i>
+                <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">
+                  Click or drag image here
+                </p>
+                <div id="fileName" style="margin-top:.5rem;font-size:.82rem;color:var(--accent);font-weight:600;display:none;"></div>
+              </div>
+              <input type="file" id="imageFile" name="image" accept="image/*" style="display:none;" required>
+            </form>
+
+            <!-- Image preview -->
+            <div id="imagePreview" style="display:none;">
+              <img id="currentImage" src="" alt="Current" style="width:100%;border-radius:var(--radius-sm);border:1px solid var(--border);">
+            </div>
+
+            <div id="noImageYet" class="empty-state-chat">
+              <i class="fa-solid fa-image"></i>
+              <p>No image uploaded yet</p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Chat Interface -->
+      <div class="col-lg-7">
+        <div class="chat-container">
+          
+          <!-- Chat history -->
+          <div class="chat-history" id="chatHistory">
+            <div class="empty-state-chat">
+              <i class="fa-solid fa-comments"></i>
+              <p>Upload an image and start editing with text prompts!</p>
+            </div>
+          </div>
+
+          <!-- Input area -->
+          <div class="chat-input-area">
+            <form id="editForm">
+              <div class="chat-input-wrapper">
+                <textarea id="promptInput" name="prompt" class="form-control" 
+                          placeholder="e.g. Make the sky pink, Add snow, Turn it into a painting…"
+                          rows="1" disabled></textarea>
+                <button type="submit" class="btn btn-primary" id="sendBtn" disabled>
+                  <i class="fa-solid fa-paper-plane"></i>
+                </button>
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- Action buttons -->
+        <div class="d-flex gap-2 mt-3 flex-wrap">
+          <button id="useImageBtn" class="btn btn-success" disabled>
+            <i class="fa-solid fa-check me-1"></i> Use This Image
+          </button>
+          <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+            <i class="fa-solid fa-xmark me-1"></i> Cancel
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let currentImagePath = null;
+
+  // ── File upload handling ──────────────────────────────────────────────────
+  const fileInput = document.getElementById('imageFile');
+  const dropZone = document.getElementById('dropZone');
+  const fileNameLabel = document.getElementById('fileName');
+  const imagePreview = document.getElementById('imagePreview');
+  const currentImage = document.getElementById('currentImage');
+  const noImageYet = document.getElementById('noImageYet');
+  const promptInput = document.getElementById('promptInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const useImageBtn = document.getElementById('useImageBtn');
+  const chatHistory = document.getElementById('chatHistory');
+
+  fileInput.addEventListener('change', uploadImage);
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--accent)';
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = 'var(--border)';
+  });
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--border)';
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      uploadImage();
+    }
+  });
+
+  function uploadImage() {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    fileNameLabel.textContent = '✓ ' + file.name;
+    fileNameLabel.style.display = 'block';
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    // Show loading
+    addAIMessage('Uploading image…');
+
+    fetch('/edit-image/upload', {
+      method: 'POST',
+      body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        currentImagePath = data.image_path;
+        currentImage.src = '/' + data.image_path;
+        imagePreview.style.display = 'block';
+        noImageYet.style.display = 'none';
+
+        // Enable chat
+        promptInput.disabled = false;
+        sendBtn.disabled = false;
+        useImageBtn.disabled = false;
+
+        // Clear chat and show welcome
+        chatHistory.innerHTML = '';
+        addAIMessage('Image uploaded! Now tell me how you want to edit it.');
+      } else {
+        alert('Upload failed: ' + data.error);
+      }
+    })
+    .catch(err => {
+      alert('Upload error: ' + err);
+    });
+  }
+
+  // ── Chat / Edit handling ──────────────────────────────────────────────────
+  const editForm = document.getElementById('editForm');
+
+  editForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const prompt = promptInput.value.trim();
+    if (!prompt || !currentImagePath) return;
+
+    // Add user message
+    addUserMessage(prompt);
+    promptInput.value = '';
+
+    // Add loading AI message
+    const loadingId = addAIMessage('<span class="loading-spinner"></span> Editing image…');
+
+    // Send edit request
+    fetch('/edit-image/edit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        image_path: currentImagePath,
+        prompt: prompt
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      // Remove loading message
+      document.getElementById(loadingId)?.remove();
+
+      if (data.success) {
+        currentImagePath = data.edited_path;
+        currentImage.src = '/' + data.edited_path;
+
+        // Show result in chat
+        addAIMessage(
+          `Done! Here's your edited image:<br><img src="/${data.edited_path}" alt="Edited" style="max-width:100%;border-radius:8px;margin-top:0.5rem;">`
+        );
+      } else {
+        addAIMessage('❌ Error: ' + data.error);
+      }
+    })
+    .catch(err => {
+      document.getElementById(loadingId)?.remove();
+      addAIMessage('❌ Request failed: ' + err);
+    });
+  });
+
+  // ── Use image button ──────────────────────────────────────────────────────
+  useImageBtn.addEventListener('click', () => {
+    if (!currentImagePath) return;
+
+    // Redirect to preview with this image
+    fetch('/edit-image/use', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image_path: currentImagePath})
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        window.location.href = '/preview-post';
+      } else {
+        alert('Error: ' + data.error);
+      }
+    });
+  });
+
+  // ── Chat UI helpers ───────────────────────────────────────────────────────
+  function addUserMessage(text) {
+    const msg = document.createElement('div');
+    msg.className = 'chat-message user';
+    msg.innerHTML = `
+      <div class="chat-bubble">${escapeHtml(text)}</div>
+      <div class="chat-avatar user"><i class="fa-solid fa-user"></i></div>
+    `;
+    chatHistory.appendChild(msg);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+  }
+
+  function addAIMessage(html) {
+    const id = 'msg-' + Date.now();
+    const msg = document.createElement('div');
+    msg.id = id;
+    msg.className = 'chat-message ai';
+    msg.innerHTML = `
+      <div class="chat-avatar ai"><i class="fa-solid fa-wand-sparkles"></i></div>
+      <div class="chat-bubble">${html}</div>
+    `;
+    chatHistory.appendChild(msg);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+    return id;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Auto-resize textarea
+  promptInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+</script>
+{% endblock %}

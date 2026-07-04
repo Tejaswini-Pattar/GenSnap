@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.stat-big        { text-align:center; padding:1.5rem 1rem; }
+.stat-big .num   { font-size:2.6rem; font-weight:800; letter-spacing:-1.5px; line-height:1; }
+.stat-big .lbl   { font-size:.75rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-top:.4rem; }
+.chart-card      { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem 1.5rem; }
+.chart-title     { font-size:.875rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem; display:flex; align-items:center; gap:.5rem; }
+.sent-bar-wrap   { margin-bottom:.8rem; }
+.sent-bar-label  { display:flex; justify-content:space-between; font-size:.78rem; font-weight:600; margin-bottom:.3rem; }
+.sent-bar-track  { height:8px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden; }
+.sent-bar-fill   { height:100%; border-radius:4px; transition:width .7s ease; }
+.empty-chart     { text-align:center; padding:2.5rem 1rem; color:var(--text-muted); font-size:.85rem; }
+.empty-chart i   { font-size:2rem; opacity:.25; display:block; margin-bottom:.6rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);font-size:.85rem;text-decoration:none;">
+      <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+    </a>
+    <h2 style="font-weight:800;letter-spacing:-.5px;margin-top:.5rem;margin-bottom:.2rem;">
+      <i class="fa-solid fa-chart-line me-2" style="color:var(--accent);"></i>Analytics
+    </h2>
+    <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">
+      Your posting performance at a glance.
+      <span style="color:var(--text-muted);font-size:.75rem;margin-left:.5rem;">
+        (User ID: {{ current_user_id }})
+      </span>
+    </p>
+  </div>
+  <button onclick="refreshAnalytics()" id="refreshBtn" class="btn btn-secondary btn-sm">
+    <i class="fa-solid fa-rotate-right me-1"></i> Refresh
+  </button>
+</div>
+
+<!-- ── 4 Stat cards ── -->
+{% set total   = analytics.total   | default(0) %}
+{% set posted  = analytics.posted  | default(0) %}
+{% set pending = analytics.pending | default(0) %}
+{% set sd      = analytics.sentiment_dist | default({}) %}
+{% set pos_cnt = sd.get('POSITIVE', 0) if sd else 0 %}
+{% set tot_s   = (sd.get('POSITIVE',0) + sd.get('NEUTRAL',0) + sd.get('NEGATIVE',0)) if sd else 0 %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card h-100">
+      <div class="stat-big">
+        <div class="num" style="color:var(--accent);" id="stat-total">{{ total }}</div>
+        <div class="lbl">Total Posts</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card h-100">
+      <div class="stat-big">
+        <div class="num" style="color:#16a34a;" id="stat-posted">{{ posted }}</div>
+        <div class="lbl">Published</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card h-100">
+      <div class="stat-big">
+        <div class="num" style="color:#d97706;" id="stat-pending">{{ pending }}</div>
+        <div class="lbl">Scheduled</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card h-100">
+      <div class="stat-big">
+        {% if tot_s > 0 %}
+          <div class="num" style="color:#16a34a;" id="stat-sentiment">{{ ((pos_cnt / tot_s) * 100) | int }}%</div>
+        {% else %}
+          <div class="num" style="color:var(--text-muted);" id="stat-sentiment">—</div>
+        {% endif %}
+        <div class="lbl">Positive Captions</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 3 Charts ── -->
+<div class="row g-4">
+
+  <!-- Chart 1: Posts over last 14 days -->
+  <div class="col-lg-8">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="fa-solid fa-calendar-days" style="color:var(--accent);"></i>
+        Posts — Last 14 Days
+      </div>
+      {% if total > 0 %}
+        <canvas id="postsChart" height="110"></canvas>
+      {% else %}
+        <div class="empty-chart">
+          <i class="fa-solid fa-chart-line"></i>
+          No posts yet. Create your first post!
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Chart 2: Platform split -->
+  <div class="col-lg-4">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="fa-solid fa-share-nodes" style="color:#0284c7;"></i>
+        Platform Split
+      </div>
+      {% set pc = analytics.platform_counts | default({}) %}
+      {% set ig = pc.get('instagram', 0) if pc else 0 %}
+      {% set tg = pc.get('telegram',  0) if pc else 0 %}
+      {% if ig + tg > 0 %}
+        <canvas id="platformChart" height="200"></canvas>
+      {% else %}
+        <div class="empty-chart">
+          <i class="fa-solid fa-chart-pie"></i>
+          No platform data yet.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Chart 3: Caption Sentiment -->
+  <div class="col-lg-12">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="fa-solid fa-brain" style="color:#7c5cfc;"></i>
+        Caption Sentiment Analysis
+        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400;margin-left:.25rem;">— powered by DistilBERT NLP model</span>
+      </div>
+      {% if tot_s > 0 %}
+        <div class="row g-4 align-items-center">
+          <div class="col-md-6">
+            {% for lbl, color, emoji in [('POSITIVE','#16a34a','😊'),('NEUTRAL','#d97706','😐'),('NEGATIVE','#dc2626','😟')] %}
+              {% set cnt = sd.get(lbl, 0) %}
+              {% set pct = ((cnt / tot_s) * 100) | round(1) %}
+              <div class="sent-bar-wrap">
+                <div class="sent-bar-label">
+                  <span>{{ emoji }} {{ lbl | title }}</span>
+                  <span style="color:{{ color }};">{{ pct }}% &nbsp;({{ cnt }} post{{ 's' if cnt != 1 }})</span>
+                </div>
+                <div class="sent-bar-track">
+                  <div class="sent-bar-fill" style="width:{{ pct }}%;background:{{ color }};"></div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="col-md-6" style="max-height:200px;display:flex;justify-content:center;">
+            <canvas id="sentimentChart" style="max-height:200px;"></canvas>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty-chart">
+          <i class="fa-solid fa-face-smile"></i>
+          No sentiment data yet.<br>
+          Use "Analyse Sentiment" on the Generate page before posting.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ANALYTICS = {{ analytics | tojson }};
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
+Chart.defaults.font.family = 'Inter, sans-serif';
+
+// ── Live refresh ─────────────────────────────────────────────
+async function refreshAnalytics() {
+  const btn = document.getElementById('refreshBtn');
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin me-1"></i> Refreshing…';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/analytics-data');
+    const data = await resp.json();
+
+    // Update stat numbers with animation
+    animateNum('stat-total',   data.total   || 0);
+    animateNum('stat-posted',  data.posted  || 0);
+    animateNum('stat-pending', data.pending || 0);
+
+    const sd = data.sentiment_dist || {};
+    const tots = (sd.POSITIVE||0) + (sd.NEUTRAL||0) + (sd.NEGATIVE||0);
+    const sentEl = document.getElementById('stat-sentiment');
+    if (sentEl) sentEl.textContent = tots > 0 ? Math.round((sd.POSITIVE||0)/tots*100)+'%' : '—';
+
+    btn.innerHTML = '<i class="fa-solid fa-check me-1"></i> Updated!';
+    setTimeout(() => {
+      btn.innerHTML = '<i class="fa-solid fa-rotate-right me-1"></i> Refresh';
+      btn.disabled = false;
+    }, 1500);
+  } catch(e) {
+    btn.innerHTML = '<i class="fa-solid fa-rotate-right me-1"></i> Refresh';
+    btn.disabled = false;
+  }
+}
+
+function animateNum(id, target) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const start = parseInt(el.textContent) || 0;
+  if (start === target) return;
+  const duration = 600;
+  const startTime = performance.now();
+  function step(now) {
+    const progress = Math.min((now - startTime) / duration, 1);
+    el.textContent = Math.round(start + (target - start) * progress);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Auto-refresh every 30 seconds
+setInterval(refreshAnalytics, 30000);
+
+// ── Chart 1: Posts over last 14 days ────────────────────────
+(function() {
+  const el = document.getElementById('postsChart');
+  if (!el) return;
+  const raw = ANALYTICS.posts_per_day || [];
+  const labels = [], counts = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    labels.push(d.toLocaleDateString('en', { month:'short', day:'numeric' }));
+    const found = raw.find(r => r.day === key);
+    counts.push(found ? found.cnt : 0);
+  }
+  new Chart(el, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Posts',
+        data: counts,
+        backgroundColor: counts.map(v => v > 0 ? 'rgba(124,92,252,.8)' : 'rgba(124,92,252,.12)'),
+        borderRadius: 5,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } }
+      }
+    }
+  });
+})();
+
+// ── Chart 2: Platform doughnut ───────────────────────────────
+(function() {
+  const el = document.getElementById('platformChart');
+  if (!el) return;
+  const pc = ANALYTICS.platform_counts || {};
+  new Chart(el, {
+    type: 'doughnut',
+    data: {
+      labels: ['Instagram', 'Telegram'],
+      datasets: [{
+        data: [pc.instagram || 0, pc.telegram || 0],
+        backgroundColor: ['#e1306c', '#229ed9'],
+        borderWidth: 0,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 16, boxWidth: 12 } }
+      }
+    }
+  });
+})();
+
+// ── Chart 3: Sentiment doughnut ──────────────────────────────
+(function() {
+  const el = document.getElementById('sentimentChart');
+  if (!el) return;
+  const sd = ANALYTICS.sentiment_dist || {};
+  const total = (sd.POSITIVE||0) + (sd.NEUTRAL||0) + (sd.NEGATIVE||0);
+  if (!total) return;
+  new Chart(el, {
+    type: 'doughnut',
+    data: {
+      labels: ['Positive', 'Neutral', 'Negative'],
+      datasets: [{
+        data: [sd.POSITIVE||0, sd.NEUTRAL||0, sd.NEGATIVE||0],
+        backgroundColor: ['#16a34a', '#d97706', '#dc2626'],
+        borderWidth: 0,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '60%',
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

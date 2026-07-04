@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Connect Telegram{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6 col-md-8">
+
+    <!-- Page header -->
+    <div class="mb-4">
+      <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);font-size:.85rem;text-decoration:none;">
+        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+      </a>
+      <h2 style="font-weight:800;letter-spacing:-.5px;margin-top:.75rem;margin-bottom:.25rem;">
+        <i class="fa-brands fa-telegram me-2" style="color:#229ed9;"></i>Connect Telegram
+      </h2>
+      <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">Link your Telegram chat or channel to receive posts.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-4">
+        {% if is_connected %}
+          <!-- Connected state -->
+          <div style="text-align:center;padding:1rem 0 1.5rem;">
+            <div style="width:60px;height:60px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
+              <i class="fa-solid fa-circle-check" style="color:var(--success);font-size:1.5rem;"></i>
+            </div>
+            <h5 style="font-weight:700;margin-bottom:.35rem;">Telegram Connected</h5>
+            <p style="color:var(--text-secondary);font-size:.875rem;margin-bottom:1.5rem;">
+              Chat ID: <code>{{ current_chat_id }}</code>
+            </p>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+              <a href="{{ url_for('test_telegram') }}" class="btn btn-info">
+                <i class="fa-solid fa-paper-plane me-1"></i> Send Test Message
+              </a>
+              <a href="{{ url_for('disconnect_telegram') }}" class="btn btn-danger">
+                <i class="fa-solid fa-plug-circle-xmark me-1"></i> Disconnect
+              </a>
+            </div>
+          </div>
+
+        {% else %}
+          <!-- How to get chat ID -->
+          <div class="alert alert-info mb-4">
+            <h6 style="font-weight:700;margin-bottom:.75rem;">
+              <i class="fa-solid fa-circle-info me-2"></i>How to get your Chat ID
+            </h6>
+            <ol style="margin:0;padding-left:1.25rem;">
+              <li>Open Telegram and search for <strong>@userinfobot</strong></li>
+              <li>Start a chat and send <code>/start</code></li>
+              <li>The bot replies with your Chat ID (e.g. <code>123456789</code>)</li>
+              <li>Paste that number below</li>
+            </ol>
+            <hr style="margin:.75rem 0;">
+            <p style="margin:0;font-size:.82rem;">
+              <strong>For channels:</strong> Add <code>@getidsbot</code> as admin and send <code>/start</code>
+            </p>
+          </div>
+
+          <form method="POST">
+            <div class="mb-4">
+              <label for="chat_id" class="form-label">Telegram Chat ID</label>
+              <div style="position:relative;">
+                <i class="fa-brands fa-telegram" style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:#229ed9;font-size:.9rem;"></i>
+                <input type="text" class="form-control" id="chat_id" name="chat_id"
+                       placeholder="e.g. 123456789" required
+                       style="padding-left:2.5rem;">
+              </div>
+              <div class="form-text">Personal chat ID, group ID, or channel ID</div>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-plug me-1"></i> Connect
+              </button>
+              <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Info card -->
+    <div class="card mt-4" style="background:rgba(2,132,199,.04);border-color:rgba(2,132,199,.15);">
+      <div class="card-body p-4">
+        <h6 style="font-weight:700;color:var(--info);margin-bottom:.75rem;">
+          <i class="fa-solid fa-circle-info me-2"></i>About Telegram Integration
+        </h6>
+        <ul style="margin:0;">
+          <li>Posts are sent as high-quality photos</li>
+          <li>Captions support up to 1024 characters</li>
+          <li>Works with personal chats, groups, and channels</li>
+          <li>Images are auto-optimized (max 1280px)</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

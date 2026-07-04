@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center" style="padding-top:2rem;">
+  <div class="col-lg-4 col-md-6 col-sm-10">
+
+    <div class="text-center mb-4">
+      <div style="font-size:2rem;margin-bottom:.5rem;">✦</div>
+      <h2 style="font-weight:800;letter-spacing:-.5px;">Create account</h2>
+      <p style="color:var(--text-secondary);font-size:.9rem;">Start automating your Instagram today</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-4">
+        <form method="POST" autocomplete="on">
+          <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <div style="position:relative;">
+              <i class="fa-solid fa-user" style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;"></i>
+              <input type="text" class="form-control" id="username" name="username"
+                     placeholder="choose_a_username" required autocomplete="username"
+                     style="padding-left:2.5rem;">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <div style="position:relative;">
+              <i class="fa-solid fa-envelope" style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;"></i>
+              <input type="email" class="form-control" id="email" name="email"
+                     placeholder="you@example.com" required autocomplete="email"
+                     style="padding-left:2.5rem;">
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label for="password" class="form-label">Password</label>
+            <div style="position:relative;">
+              <i class="fa-solid fa-lock" style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;"></i>
+              <input type="password" class="form-control" id="password" name="password"
+                     placeholder="min. 6 characters" required autocomplete="new-password"
+                     style="padding-left:2.5rem;">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="fa-solid fa-user-plus me-1"></i> Create Account
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <p class="text-center mt-4" style="color:var(--text-muted);font-size:.875rem;">
+      Already have an account?
+      <a href="{{ url_for('login') }}" style="color:var(--accent);font-weight:600;">Sign in</a>
+    </p>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Instagram Settings{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6 col-md-8">
+
+    <!-- Page header -->
+    <div class="mb-4">
+      <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);font-size:.85rem;text-decoration:none;">
+        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+      </a>
+      <h2 style="font-weight:800;letter-spacing:-.5px;margin-top:.75rem;margin-bottom:.25rem;">
+        <i class="fa-brands fa-instagram me-2" style="color:#e1306c;"></i>Instagram Settings
+      </h2>
+      <p style="color:var(--text-secondary);font-size:.875rem;margin:0;">Connect your Instagram account for automated posting.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-4">
+        <div class="alert alert-warning mb-4">
+          <i class="fa-solid fa-triangle-exclamation me-2"></i>
+          <strong>Heads up:</strong> Your credentials are stored locally in a session file. We recommend using a dedicated automation account.
+        </div>
+
+        <form method="POST">
+          <div class="mb-3">
+            <label for="username" class="form-label">Instagram Username</label>
+            <div style="position:relative;">
+              <i class="fa-brands fa-instagram" style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:#e1306c;font-size:.9rem;"></i>
+              <input type="text" class="form-control" id="username" name="username"
+                     placeholder="your_instagram_handle" required
+                     style="padding-left:2.5rem;">
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label for="password" class="form-label">Instagram Password</label>
+            <div style="position:relative;">
+              <i class="fa-solid fa-lock" style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;"></i>
+              <input type="password" class="form-control" id="password" name="password"
+                     placeholder="••••••••" required
+                     style="padding-left:2.5rem;">
+            </div>
+            <div class="form-text">Stored securely in a local session file.</div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Save &amp; Login
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card mt-4" style="background:rgba(217,119,6,.04);border-color:rgba(217,119,6,.15);">
+      <div class="card-body p-4">
+        <h6 style="font-weight:700;color:var(--warning);margin-bottom:.75rem;">
+          <i class="fa-solid fa-circle-exclamation me-2"></i>Important Notes
+        </h6>
+        <ul style="margin:0;">
+          <li>Use a dedicated Instagram account for automation</li>
+          <li>Avoid posting too frequently to prevent spam flags</li>
+          <li>Ensure your account settings match your desired visibility</li>
+          <li>Instagram may limit automated posting — use responsibly</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

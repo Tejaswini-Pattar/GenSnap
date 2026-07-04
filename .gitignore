@@ -1,0 +1,38 @@
+# Secrets & credentials — never commit these
+session.json
+telegram_config.json
+
+# Database
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.env
+venv/
+env/
+.venv/
+
+# Generated/uploaded content
+generated_images/
+uploaded_images/
+report_charts/
+report_charts.zip
+
+# ML model (large binary — consider Git LFS if you want to track it)
+*.pkl
+
+# IDE
+.vscode/
+
+# Misc
+*.log
+test.jpg
+New Text Document.txt

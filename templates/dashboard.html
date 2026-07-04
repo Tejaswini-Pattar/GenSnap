@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 style="font-size:1.6rem;font-weight:800;letter-spacing:-.5px;margin-bottom:.2rem;">
+      Hey, {{ session.username }} 👋
+    </h1>
+    <p style="color:var(--text-muted);font-size:.875rem;margin:0;">Here's what's happening with your posts.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('generate_image') }}" class="btn btn-primary">
+      <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Generate Image
+    </a>
+    <a href="{{ url_for('upload_image') }}" class="btn btn-secondary">
+      <i class="fa-solid fa-upload me-1"></i> Upload
+    </a>
+  </div>
+</div>
+
+<!-- Quick actions row -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('generate_image') }}" style="text-decoration:none;">
+      <div class="stat-card d-flex align-items-center gap-3">
+        <div class="stat-icon purple" style="flex-shrink:0;">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color:#7c5cfc;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Generate</div>
+          <div style="font-size:.875rem;font-weight:600;color:var(--text-primary);margin-top:.1rem;">New Image</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('upload_image') }}" style="text-decoration:none;">
+      <div class="stat-card d-flex align-items-center gap-3">
+        <div class="stat-icon blue" style="flex-shrink:0;">
+          <i class="fa-solid fa-upload" style="color:#0284c7;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Upload</div>
+          <div style="font-size:.875rem;font-weight:600;color:var(--text-primary);margin-top:.1rem;">From Gallery</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('scheduled_posts') }}" style="text-decoration:none;">
+      <div class="stat-card d-flex align-items-center gap-3">
+        <div class="stat-icon orange" style="flex-shrink:0;">
+          <i class="fa-solid fa-calendar-days" style="color:#d97706;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Scheduled</div>
+          <div style="font-size:.875rem;font-weight:600;color:var(--text-primary);margin-top:.1rem;">View Posts</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('connect_telegram') }}" style="text-decoration:none;">
+      <div class="stat-card d-flex align-items-center gap-3">
+        <div class="stat-icon green" style="flex-shrink:0;">
+          <i class="fa-brands fa-telegram" style="color:#16a34a;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Telegram</div>
+          <div style="font-size:.875rem;font-weight:600;color:var(--text-primary);margin-top:.1rem;">Connect</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Analytics summary strip -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <a href="{{ url_for('analytics') }}" style="text-decoration:none;">
+      <div class="stat-card d-flex align-items-center justify-content-between gap-3" style="background:linear-gradient(135deg,rgba(124,92,252,.08),rgba(124,92,252,.03));">
+        <div class="d-flex align-items-center gap-3">
+          <div class="stat-icon purple" style="flex-shrink:0;">
+            <i class="fa-solid fa-chart-line" style="color:#7c5cfc;"></i>
+          </div>
+          <div>
+            <div class="stat-label">Analytics Dashboard</div>
+            <div style="font-size:.875rem;font-weight:600;color:var(--text-primary);margin-top:.1rem;">
+              View posting trends, sentiment analysis &amp; platform stats
+            </div>
+          </div>
+        </div>
+        <i class="fa-solid fa-arrow-right" style="color:var(--accent);opacity:.6;"></i>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Recent posts table -->
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="fa-solid fa-clock-rotate-left me-2" style="color:var(--accent);"></i>Recent Posts</span>
+    <a href="{{ url_for('scheduled_posts') }}" class="btn btn-secondary btn-sm">View all</a>
+  </div>
+  <div class="card-body p-0">
+    {% if posts %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Image</th>
+              <th>Caption</th>
+              <th>Scheduled</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for post in posts %}
+            <tr>
+              <td>
+                {% if post.image_path %}
+                  <img src="/{{ post.image_path }}" alt="Post"
+                       style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">
+                {% else %}
+                  <div style="width:44px;height:44px;background:var(--bg-secondary);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-image" style="color:var(--text-muted);font-size:.8rem;"></i>
+                  </div>
+                {% endif %}
+              </td>
+              <td style="max-width:220px;">
+                <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  {{ post.caption[:60] if post.caption else '—' }}{% if post.caption and post.caption|length > 60 %}…{% endif %}
+                </span>
+              </td>
+              <td style="white-space:nowrap;font-size:.8rem;">{{ post.schedule_time }}</td>
+              <td>
+                {% if post.status == 'posted' %}
+                  <span class="badge bg-success">Posted</span>
+                {% elif post.status == 'pending' %}
+                  <span class="badge bg-warning">Pending</span>
+                {% else %}
+                  <span class="badge bg-danger">{{ post.status }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if post.status == 'pending' %}
+                  <a href="{{ url_for('cancel_post', post_id=post.id) }}"
+                     class="btn btn-danger btn-sm"
+                     onclick="return confirm('Cancel this post?')">
+                    <i class="fa-solid fa-xmark"></i>
+                  </a>
+                {% else %}
+                  <span style="color:var(--text-muted);font-size:.8rem;">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon"><i class="fa-solid fa-photo-film"></i></div>
+        <p>No posts yet. Create your first post!</p>
+        <a href="{{ url_for('generate_image') }}" class="btn btn-primary mt-3">
+          <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Generate Image
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
