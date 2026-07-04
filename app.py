@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from functools import wraps
 import os
